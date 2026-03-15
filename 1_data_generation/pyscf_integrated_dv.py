@@ -19,6 +19,24 @@ SPIN = 0
 GRID_SETUPS = [(75, 302), (99, 590), (250, 974)]
 BLOCK_SIZE = 20000
 OUTPUT_TXT = "1_data_generation/pyscf_integratedDV_matrices.txt"
+XC_GRID = (99, 590)
+NL_GRID = (75, 302)
+REFERENCE_ENERGY_BREAKDOWN = {
+    "total": -76.4407590520,
+    "nuc": 9.181285695624,
+    "alpha_hf_x": -1.40555122549676,
+    "beta_hf_x": -1.40555122549676,
+    "dft_corr": -0.41826530714886,
+    "dft_x": -6.11450844803026,
+    "dft_nlc": 0.04257534026311,
+    "one_e_alpha": -61.49829625353800,
+    "one_e_beta": -61.49829625353807,
+    "coul": 46.67584862541301,
+    "alpha_lr_hf_x": -0.79296360752688,
+    "beta_lr_hf_x": -0.79296360752688,
+}
+REFERENCE_ENERGY_BREAKDOWN["alpha_sr_hf_x"] = REFERENCE_ENERGY_BREAKDOWN["alpha_hf_x"] - REFERENCE_ENERGY_BREAKDOWN["alpha_lr_hf_x"]
+REFERENCE_ENERGY_BREAKDOWN["beta_sr_hf_x"] = REFERENCE_ENERGY_BREAKDOWN["beta_hf_x"] - REFERENCE_ENERGY_BREAKDOWN["beta_lr_hf_x"]
 
 NELE_SERIES = 96
 NSERIES = 18
@@ -495,6 +513,13 @@ def build_mol_and_dm():
     )
     mf = dft.UKS(mol)
     mf.xc = XC
+    # Match the requested energy-breakdown grid setup.
+    mf.grids.atom_grid = XC_GRID
+    mf.grids.prune = None
+    mf.grids.radii_adjust = None
+    mf.nlcgrids.atom_grid = NL_GRID
+    mf.nlcgrids.prune = None
+    mf.nlcgrids.radii_adjust = None
     energy = mf.kernel()
     if not mf.converged:
         raise RuntimeError("UKS did not converge.")
@@ -585,6 +610,63 @@ def resolve_output_path():
     return repo_root / OUTPUT_TXT
 
 
+def compute_pyscf_energy_breakdown(mf, dm_a, dm_b):
+    """Compute energy terms from converged PySCF UKS results.
+
+    Args:
+        mf: Converged UKS object.
+        dm_a: Alpha density matrix.
+        dm_b: Beta density matrix.
+
+    Returns:
+        Dict with PySCF-generated energy terms. For composite `wb97xv`,
+        `dft_exchange` and `dft_correlation` are not separable via LibXC API,
+        so they are set to None and `dft_xc_total` is provided.
+    """
+    dm = np.asarray([dm_a, dm_b])
+    ni = mf._numint
+    veff = mf.get_veff(mf.mol, dm)
+
+    alpha_hf_x = -0.5 * np.einsum("ij,ji", dm_a, veff.vk[0]).real
+    beta_hf_x = -0.5 * np.einsum("ij,ji", dm_b, veff.vk[1]).real
+
+    omega, alpha, _ = ni.rsh_and_hybrid_coeff(mf.xc, spin=mf.mol.spin)
+    alpha_lr_hf_x = None
+    beta_lr_hf_x = None
+    alpha_sr_hf_x = None
+    beta_sr_hf_x = None
+    if omega != 0 and alpha != 0:
+        vk_lr = mf.get_k(mf.mol, dm, hermi=1, omega=omega)
+        alpha_lr_hf_x = -0.5 * alpha * np.einsum("ij,ji", dm_a, vk_lr[0]).real
+        beta_lr_hf_x = -0.5 * alpha * np.einsum("ij,ji", dm_b, vk_lr[1]).real
+        alpha_sr_hf_x = alpha_hf_x - alpha_lr_hf_x
+        beta_sr_hf_x = beta_hf_x - beta_lr_hf_x
+
+    _, dft_xc_total, _ = ni.nr_uks(mf.mol, mf.grids, mf.xc, dm, max_memory=mf.max_memory)
+    dft_nlc = 0.0
+    if mf.do_nlc():
+        xc_nlc = mf.xc if ni.libxc.is_nlc(mf.xc) else mf.nlc
+        _, dft_nlc, _ = ni.nr_nlc_vxc(mf.mol, mf.nlcgrids, xc_nlc, dm_a + dm_b, max_memory=mf.max_memory)
+
+    return {
+        "total": float(mf.e_tot),
+        "nuc": float(mf.energy_nuc()),
+        "alpha_hf_x": float(alpha_hf_x),
+        "beta_hf_x": float(beta_hf_x),
+        "omega": float(omega),
+        "alpha_lr_hf_x": None if alpha_lr_hf_x is None else float(alpha_lr_hf_x),
+        "beta_lr_hf_x": None if beta_lr_hf_x is None else float(beta_lr_hf_x),
+        "alpha_sr_hf_x": None if alpha_sr_hf_x is None else float(alpha_sr_hf_x),
+        "beta_sr_hf_x": None if beta_sr_hf_x is None else float(beta_sr_hf_x),
+        "dft_exchange": None,
+        "dft_correlation": None,
+        "dft_xc_total": float(dft_xc_total),
+        "dft_nlc": float(dft_nlc),
+        "one_e_alpha": float(mf.scf_summary["e1"] / 2.0),
+        "one_e_beta": float(mf.scf_summary["e1"] / 2.0),
+        "coul": float(mf.scf_summary["coul"]),
+    }
+
 def main():
     """Run full integratedDV generation and write matrices for all configured grids.
 
@@ -597,7 +679,28 @@ def main():
     output_path = resolve_output_path()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    mol, dm_a, dm_b, _ = build_mol_and_dm()
+    mol, dm_a, dm_b, mf = build_mol_and_dm()
+    
+    energy_breakdown = compute_pyscf_energy_breakdown(mf, dm_a, dm_b)
+    ref = REFERENCE_ENERGY_BREAKDOWN
+
+    print("\nEnergy breakdown (PySCF @ grid (99, 590)), it is better if the diff can be smaller than 1e-6 hartree for all terms, but a little larger is acceptable:")
+    print(f" Total energy in the final basis set =      {energy_breakdown['total']: .10f}  (ref {ref['total']: .10f}, Δ {energy_breakdown['total'] - ref['total']: .3e})")
+    print(f"Nuclear Repulsion Energy =       {energy_breakdown['nuc']: .12f} hartrees  (ref {ref['nuc']: .12f}, Δ {energy_breakdown['nuc'] - ref['nuc']: .3e})")
+    print()
+    print(f" Alpha HF Exchange         Energy =  {energy_breakdown['alpha_hf_x']: .14f}  (ref {ref['alpha_hf_x']: .14f}, Δ {energy_breakdown['alpha_hf_x'] - ref['alpha_hf_x']: .3e})")
+    print(f" Beta HF Exchange          Energy =  {energy_breakdown['beta_hf_x']: .14f}  (ref {ref['beta_hf_x']: .14f}, Δ {energy_breakdown['beta_hf_x'] - ref['beta_hf_x']: .3e})")
+    print(f" Alpha LR HF Exchange      Energy =  {energy_breakdown['alpha_lr_hf_x']: .14f} (ref {ref['alpha_lr_hf_x']: .14f}, Δ {energy_breakdown['alpha_lr_hf_x'] - ref['alpha_lr_hf_x']: .3e})")
+    print(f" Beta LR HF Exchange       Energy =  {energy_breakdown['beta_lr_hf_x']: .14f} (ref {ref['beta_lr_hf_x']: .14f}, Δ {energy_breakdown['beta_lr_hf_x'] - ref['beta_lr_hf_x']: .3e})")
+    print(f" Alpha SR HF Exchange (w)  Energy =  {energy_breakdown['alpha_sr_hf_x']: .14f} (ref {ref['alpha_sr_hf_x']: .14f}, Δ {energy_breakdown['alpha_sr_hf_x'] - ref['alpha_sr_hf_x']: .3e})")
+    print(f" Beta SR HF Exchange (w)   Energy =  {energy_breakdown['beta_sr_hf_x']: .14f} (ref {ref['beta_sr_hf_x']: .14f}, Δ {energy_breakdown['beta_sr_hf_x'] - ref['beta_sr_hf_x']: .3e})")
+    print(f" DFT XC (X+C, excl. NLC)   Energy =  {energy_breakdown['dft_xc_total']: .14f}  (ref X+C {(ref['dft_x'] + ref['dft_corr']): .14f}, Δ {energy_breakdown['dft_xc_total'] - (ref['dft_x'] + ref['dft_corr']): .3e})")
+    print(f" DFT Non-Local Correlation Energy =  {energy_breakdown['dft_nlc']: .14f}  (ref {ref['dft_nlc']: .14f}, Δ {energy_breakdown['dft_nlc'] - ref['dft_nlc']: .3e})")
+    print(f" One-Electron (alpha)      Energy = {energy_breakdown['one_e_alpha']: .14f}  (ref {ref['one_e_alpha']: .14f}, Δ {energy_breakdown['one_e_alpha'] - ref['one_e_alpha']: .3e})")
+    print(f" One-Electron (beta)       Energy = {energy_breakdown['one_e_beta']: .14f}  (ref {ref['one_e_beta']: .14f}, Δ {energy_breakdown['one_e_beta'] - ref['one_e_beta']: .3e})")
+    print(f" Total Coulomb             Energy =  {energy_breakdown['coul']: .14f}  (ref {ref['coul']: .14f}, Δ {energy_breakdown['coul'] - ref['coul']: .3e})")
+
+
     ni = dft.numint.NumInt()
 
     with output_path.open("w", encoding="utf-8") as fh:
