@@ -1,0 +1,23 @@
+
+# Configuration file for the cleaned 289-parameter COACH MIO workflow
+
+nonzeros: [24, 32, 40]
+repeats: 2
+time_limit: 3600
+nthreads: 16
+verbose: true
+
+input_dir: "../processed_data"
+out_dir: "runs/pass1"
+
+A_rows: [64, 153, 166]
+Amatrix_name: "A_matrix.npy"
+bvec_name: "b_vec.npy"
+weight_name: "weight_vec.npy"
+
+with_diff: false
+diff_name: "diff_constraint_99590.npy"
+grid_thresh: 0.015
+
+random_seed: 0
+

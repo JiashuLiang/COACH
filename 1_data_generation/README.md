@@ -1,64 +1,69 @@
-# Training data generation
+# 1_data_generation
 
-## Why this folder exists
-The original workflow used in the paper was implemented in Q-Chem/C++ (see `qchem_codes_insert.C`).
-To help others train new exchange-correlation functionals without requiring Q-Chem internals, this repo provides a pure-Python/PySCF implementation:
+This directory contains the maintained PySCF-side data-generation and extraction path used by the cleaned COACH workflow.
 
-- generator: `pyscf_integrated_dv.py`
-- reference output: `SIE4x4_h2o.out`
-- generated output: `pyscf_integratedDV_matrices.txt`
+## Maintained Entry Points
 
-The goal is to keep the same equations and channel ordering while making the pipeline easier to run, inspect, and modify.
+- [`extract_data.py`](extract_data.py): parse one text output per species and assemble the training dictionaries used downstream
+- [`pyscf_integrated_dv.py`](pyscf_integrated_dv.py): PySCF reference implementation for generating integratedDV matrices and related energy terms
 
-## How to use this for training
-1. Run `pyscf_integrated_dv.py` to generate integratedDV matrices.
-2. Compare against `SIE4x4_h2o.out` (via `compare_integrated_dv_tmp.py` if needed).
-3. Use each `96 x 180` matrix as feature blocks for coefficient fitting / functional training.
+## Requirements
 
-## How to read the 96 x 180 matrix
-Each point contributes an expansion basis of shape `96 x 18`.  
-Different physical channels reuse this same 18-group basis and are concatenated into the 180 columns.
+- Python 3.10+
+- `numpy`
+- `scipy`
+- `pyscf`
+- `pandas` only if `--DatasetEval` points to `.xlsx` or `.xls`
 
-High-level channel groups (conceptual):
-1. Exchange mGGA
-2. Exchange mGGA with a multiplier to satisfy the nonuniform scaling
-3. Exchange RSH mGGA
-4. Exchange RSH mGGA with a multiplier (from SCAN) to satisfy the nonuniform scaling
-5. Same-spin correlation from B97
-6. Same-spin correlation from B97 with `2beta`
-7. Opposite-spin correlation from B97
-8. Same-spin correlation from SCAN UEG cases
-9. Same-spin correlation from SCAN UEG cases with `2beta`
-10. Opposite-spin correlation from SCAN UEG
+## Expected Inputs
 
-In practice, these conceptual groups are packed into contiguous column slices in `pyscf_integrated_dv.py` (`accumulate_integrated_dv_block`, `accumulate_exchange_block`, `accumulate_correlation_block`).
+`extract_data.py` expects:
 
-## Expansion Group Mapping (0..17)
-This mapping defines the 18 basis groups used inside each channel block.
+- one `.txt` file per species under `--input_data_dir`
+- a populated `DatasetEval` file describing reactions and stoichiometries
+- each species file to contain the energy labels and integratedDV matrix blocks consumed by the parser
 
-| Group | `w` or `beta_f` source | GGA expansion (u-side) | mGGA expansion (w/beta_f-side) |
-|---|---|---|---|
-| 0 | `w` | Linear `u` | Linear |
-| 1 | `w` | Linear `u` | Legendre |
-| 2 | `w` | Linear `u` | Chebyshev |
-| 3 | `w` | Legendre | Linear |
-| 4 | `w` | Legendre | Legendre |
-| 5 | `w` | Legendre | Chebyshev |
-| 6 | `w` | Chebyshev | Linear |
-| 7 | `w` | Chebyshev | Legendre |
-| 8 | `w` | Chebyshev | Chebyshev |
-| 9 | `beta_f` | Linear `u` | Linear |
-| 10 | `beta_f` | Linear `u` | Legendre |
-| 11 | `beta_f` | Linear `u` | Chebyshev |
-| 12 | `beta_f` | Legendre | Linear |
-| 13 | `beta_f` | Legendre | Legendre |
-| 14 | `beta_f` | Legendre | Chebyshev |
-| 15 | `beta_f` | Chebyshev | Linear |
-| 16 | `beta_f` | Chebyshev | Legendre |
-| 17 | `beta_f` | Chebyshev | Chebyshev |
+The parser recognizes CSV, TSV, and Excel `DatasetEval` files, but the maintained optimization workflow downstream expects CSV metadata.
 
-### Notes on interpretation
-- Groups `0..8` use `w`-based mGGA variables.
-- Groups `9..17` use `beta_f`-based mGGA variables.
-- The `u` side is always one of `{Linear, Legendre, Chebyshev}` expansions.
-- The full 96 comes from `12 (w or beta_f terms) x 8 (u terms)`.
+## Usage
+
+```bash
+python3 1_data_generation/extract_data.py \
+  --input_data_dir path/to/pyscf_outputs \
+  --DatasetEval path/to/dataset_eval.csv \
+  --output_dir processed/raw
+```
+
+The script writes:
+
+- `raw_data.dict`
+- `reaction_data.dict`
+- `failed_files.log` when parsing failures occur
+- `failed_reactions.log` when a reaction cannot be assembled from the parsed species
+
+## `reaction_data.dict` Structure
+
+Each reaction entry stores:
+
+- scalar energies such as `Tofit`, `Nofit`, and `DFT Non-Local Correlation`
+- short-range and long-range exchange terms
+- `Fitting`: the high-resolution fitting matrix used to build the optimization design matrix
+- one diff matrix per additional grid, already shifted relative to the fitting grid
+
+The downstream optimization pipeline assumes:
+
+- `reaction["Fitting"]` has shape `(180, 96)`
+- grid-difference entries such as `reaction["99000590"]` have the same shape
+- `reaction["Tofit"]` is the target fitted by the linear model
+
+## Reference Files
+
+- [`SIE4x4_h2o.out`](SIE4x4_h2o.out): sample text output used for parser validation
+- [`qchem_codes_insert.C`](qchem_codes_insert.C): original Q-Chem/C++ reference implementation retained for provenance
+- [`pyscf_integratedDV_matrices.txt`](pyscf_integratedDV_matrices.txt): matrix notes and reference data used during the PySCF port
+
+`extract_data.py` is the maintained extraction interface for the supported workflow.
+
+## Matrix Layout
+
+The integratedDV matrices preserve the original channel ordering used in the paper. Conceptually, the 180 rows come from 10 channel families built from repeated 18-function basis groups, while each selected row expands into 96 coefficients during optimization.

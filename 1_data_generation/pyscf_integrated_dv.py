@@ -610,6 +610,29 @@ def resolve_output_path():
     return repo_root / OUTPUT_TXT
 
 
+def format_energy_breakdown(energy_breakdown, ref):
+    """Format the energy breakdown text block for console and file output."""
+    lines = [
+        "",
+        "Energy breakdown (PySCF @ grid (99, 590)), it is better if the diff can be smaller than 1e-6 hartree for all terms, but a little larger is acceptable:",
+        f" Total energy in the final basis set =      {energy_breakdown['total']: .10f}",
+        f"Nuclear Repulsion Energy =       {energy_breakdown['nuc']: .12f} hartrees",
+        "",
+        f" Alpha HF Exchange         Energy =  {energy_breakdown['alpha_hf_x']: .14f}",
+        f" Beta HF Exchange          Energy =  {energy_breakdown['beta_hf_x']: .14f}",
+        f" Alpha LR HF Exchange      Energy =  {energy_breakdown['alpha_lr_hf_x']: .14f}",
+        f" Beta LR HF Exchange       Energy =  {energy_breakdown['beta_lr_hf_x']: .14f}",
+        f" Alpha SR HF Exchange (w)  Energy =  {energy_breakdown['alpha_sr_hf_x']: .14f}",
+        f" Beta SR HF Exchange (w)   Energy =  {energy_breakdown['beta_sr_hf_x']: .14f}",
+        f" DFT XC (X+C, excl. NLC)   Energy =  {energy_breakdown['dft_xc_total']: .14f}",
+        f" DFT Non-Local Correlation Energy =  {energy_breakdown['dft_nlc']: .14f}",
+        f" One-Electron (alpha)      Energy = {energy_breakdown['one_e_alpha']: .14f}",
+        f" One-Electron (beta)       Energy = {energy_breakdown['one_e_beta']: .14f}",
+        f" Total Coulomb             Energy =  {energy_breakdown['coul']: .14f}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def compute_pyscf_energy_breakdown(mf, dm_a, dm_b):
     """Compute energy terms from converged PySCF UKS results.
 
@@ -683,27 +706,16 @@ def main():
     
     energy_breakdown = compute_pyscf_energy_breakdown(mf, dm_a, dm_b)
     ref = REFERENCE_ENERGY_BREAKDOWN
+    energy_breakdown_text = format_energy_breakdown(energy_breakdown, ref)
 
-    print("\nEnergy breakdown (PySCF @ grid (99, 590)), it is better if the diff can be smaller than 1e-6 hartree for all terms, but a little larger is acceptable:")
-    print(f" Total energy in the final basis set =      {energy_breakdown['total']: .10f}  (ref {ref['total']: .10f}, Δ {energy_breakdown['total'] - ref['total']: .3e})")
-    print(f"Nuclear Repulsion Energy =       {energy_breakdown['nuc']: .12f} hartrees  (ref {ref['nuc']: .12f}, Δ {energy_breakdown['nuc'] - ref['nuc']: .3e})")
-    print()
-    print(f" Alpha HF Exchange         Energy =  {energy_breakdown['alpha_hf_x']: .14f}  (ref {ref['alpha_hf_x']: .14f}, Δ {energy_breakdown['alpha_hf_x'] - ref['alpha_hf_x']: .3e})")
-    print(f" Beta HF Exchange          Energy =  {energy_breakdown['beta_hf_x']: .14f}  (ref {ref['beta_hf_x']: .14f}, Δ {energy_breakdown['beta_hf_x'] - ref['beta_hf_x']: .3e})")
-    print(f" Alpha LR HF Exchange      Energy =  {energy_breakdown['alpha_lr_hf_x']: .14f} (ref {ref['alpha_lr_hf_x']: .14f}, Δ {energy_breakdown['alpha_lr_hf_x'] - ref['alpha_lr_hf_x']: .3e})")
-    print(f" Beta LR HF Exchange       Energy =  {energy_breakdown['beta_lr_hf_x']: .14f} (ref {ref['beta_lr_hf_x']: .14f}, Δ {energy_breakdown['beta_lr_hf_x'] - ref['beta_lr_hf_x']: .3e})")
-    print(f" Alpha SR HF Exchange (w)  Energy =  {energy_breakdown['alpha_sr_hf_x']: .14f} (ref {ref['alpha_sr_hf_x']: .14f}, Δ {energy_breakdown['alpha_sr_hf_x'] - ref['alpha_sr_hf_x']: .3e})")
-    print(f" Beta SR HF Exchange (w)   Energy =  {energy_breakdown['beta_sr_hf_x']: .14f} (ref {ref['beta_sr_hf_x']: .14f}, Δ {energy_breakdown['beta_sr_hf_x'] - ref['beta_sr_hf_x']: .3e})")
-    print(f" DFT XC (X+C, excl. NLC)   Energy =  {energy_breakdown['dft_xc_total']: .14f}  (ref X+C {(ref['dft_x'] + ref['dft_corr']): .14f}, Δ {energy_breakdown['dft_xc_total'] - (ref['dft_x'] + ref['dft_corr']): .3e})")
-    print(f" DFT Non-Local Correlation Energy =  {energy_breakdown['dft_nlc']: .14f}  (ref {ref['dft_nlc']: .14f}, Δ {energy_breakdown['dft_nlc'] - ref['dft_nlc']: .3e})")
-    print(f" One-Electron (alpha)      Energy = {energy_breakdown['one_e_alpha']: .14f}  (ref {ref['one_e_alpha']: .14f}, Δ {energy_breakdown['one_e_alpha'] - ref['one_e_alpha']: .3e})")
-    print(f" One-Electron (beta)       Energy = {energy_breakdown['one_e_beta']: .14f}  (ref {ref['one_e_beta']: .14f}, Δ {energy_breakdown['one_e_beta'] - ref['one_e_beta']: .3e})")
-    print(f" Total Coulomb             Energy =  {energy_breakdown['coul']: .14f}  (ref {ref['coul']: .14f}, Δ {energy_breakdown['coul'] - ref['coul']: .3e})")
+    print(energy_breakdown_text, end="")
 
 
     ni = dft.numint.NumInt()
 
     with output_path.open("w", encoding="utf-8") as fh:
+        fh.write(energy_breakdown_text)
+        fh.write("\n")
         for radial, angular in GRID_SETUPS:
             coords, weights, grid_id = build_grid(mol, radial, angular)
             npts = weights.size

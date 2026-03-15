@@ -106,3 +106,17 @@ where:
 We implement the MIO formulation using the Gurobi solver, with a wall-time limit of 1-2 hours per value of $s$, depending on the subset size, and one restart. All calculations are performed using 16 CPU cores. We scan subset sizes from $s = 24$ to 80, resulting in a total computational cost of approximately 3000 CPU hours for a single combination of $F_{\mathrm{corr}}$ and expansion-function choices.
 
 By employing MIO, we aim to achieve a more efficient and closer-to-global solution of the subset selection problem, thereby improving both the performance and the generalizability of the resulting functional.
+
+
+Beyond physical constraints, we also introduce grid-sensitivity constraints to improve numerical stability across different integral quadrature resolutions. The procedure is:
+
+1. Construct the matrix \( \mathbf{A} \) in Equation~\ref{eq:MIO} using the high-resolution grid (250,974)/SG-1.
+2. Construct \( \mathbf{A'} \) in parallel using the lower-resolution grid (99,590)/SG-1.
+3. Optimize the functional first without grid-sensitivity constraints to identify promising candidates.
+4. For each candidate, collect:
+   - the 100 data points with the largest deviations \( |(\mathbf{A}_{k,:}-\mathbf{A'}_{k,:})\mathbf{c}| \), and
+   - an additional 200 data points with the largest \( \ell_1 \)-norms of \( \mathbf{A}_{k,:}-\mathbf{A'}_{k,:} \).
+5. Take the union of these selected data points and enforce the grid-sensitivity constraints only on that subset.
+6. Require the energy differences between the two grids to remain below a predefined threshold, set to 0.015 kcal/mol in most cases, except in the exploration of Section~\ref{subsec:numerical_constraints_effect}.
+
+This selective procedure keeps the functional stable across grid resolutions while avoiding the cost of enforcing the inequality constraints on every data point.
