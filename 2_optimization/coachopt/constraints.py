@@ -49,7 +49,13 @@ def select_diff_constraint_rows(
         chosen_indices.update(_top_abs_indices(deviations, top_per_beta).tolist())
 
     l1_norms = np.sum(np.abs(diff_matrix), axis=1)
-    chosen_indices.update(_top_abs_indices(l1_norms, top_l1).tolist())
+    remaining_indices = np.asarray(
+        [index for index in range(diff_matrix.shape[0]) if index not in chosen_indices],
+        dtype=int,
+    )
+    if remaining_indices.size:
+        additional = remaining_indices[_top_abs_indices(l1_norms[remaining_indices], top_l1)]
+        chosen_indices.update(additional.tolist())
 
     ordered_indices = np.asarray(sorted(chosen_indices), dtype=int)
     selected_names = [diff_names[index] for index in ordered_indices]

@@ -1,0 +1,18 @@
+[project]
+name = "coach-workflow"
+version = "0.0.0"
+description = "Script-first workflow for training the COACH exchange-correlation functional"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "scipy",
+  "pyscf",
+  "gurobipy",
+  "pandas",
+  "PyYAML",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["2_optimization"]

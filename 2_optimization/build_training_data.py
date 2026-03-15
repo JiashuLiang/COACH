@@ -37,7 +37,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", required=True, help="Directory for generated NumPy and pickle artifacts")
     parser.add_argument("--a-rows", nargs=3, type=int, default=(64, 153, 166), help="Three fitting-row indices")
     parser.add_argument("--diff-grid", default="99000590", help="Grid key used for diff matrices")
-    parser.add_argument("--semilocal", action="store_true", help="Build semilocal features without the SR-HF term")
     return parser
 
 
@@ -49,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
     analysis_source = args.analysis_source or next(iter(reaction_sources))
     dataset_eval_rows = load_dataset_eval_csv(args.dataset_eval)
     training_weight_rows = load_training_weights_csv(args.training_weights)
-    spec = FeatureSpec(a_rows=tuple(args.a_rows), semilocal=args.semilocal)
+    spec = FeatureSpec(a_rows=tuple(args.a_rows))
 
     outputs = build_and_save_training_data(
         reaction_sources=reaction_sources,

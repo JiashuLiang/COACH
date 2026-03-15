@@ -1,0 +1,9 @@
+# Core numerical and workflow dependencies
+numpy
+scipy
+pyscf
+gurobipy
+
+# Optional code paths used by the current scripts
+pandas
+PyYAML

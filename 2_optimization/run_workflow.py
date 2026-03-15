@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
     training_weight_rows = load_training_weights_csv(args.training_weights)
     dataset_info = load_dataset_info_csv(args.dataset_info)
     baseline_errors = load_baseline_error_csv(args.baseline_errors) if args.baseline_errors else None
-    spec = FeatureSpec(a_rows=tuple(args.a_rows), semilocal=False)
+    spec = FeatureSpec(a_rows=tuple(args.a_rows))
     diff_suffix = artifact_grid_suffix("99000590")
 
     processed_dir = Path(args.processed_dir)

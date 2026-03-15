@@ -16,11 +16,10 @@ class FeatureSpec:
     """Controls how the 289-parameter baseline feature vector is assembled."""
 
     a_rows: tuple[int, int, int] = DEFAULT_A_ROWS
-    semilocal: bool = False
 
     @property
     def feature_count(self) -> int:
-        return len(self.a_rows) * 96 if self.semilocal else len(self.a_rows) * 96 + 1
+        return len(self.a_rows) * 96 + 1
 
 
 def _reaction_lookup(dataset_eval_rows: list[dict]) -> tuple[dict[str, dict], dict[str, list[str]]]:
@@ -41,11 +40,8 @@ def _feature_vector(reaction: dict, spec: FeatureSpec) -> tuple[np.ndarray, floa
         )
     features = fitting[list(spec.a_rows)].reshape(-1)
     b_value = float(reaction["Tofit"])
-    if spec.semilocal:
-        b_value += float(reaction["Alpha Long Range Exchange"]) + float(reaction["Beta Long Range Exchange"])
-    else:
-        sr_exchange = float(reaction["Alpha Short Range Exchange"]) + float(reaction["Beta Short Range Exchange"])
-        features = np.concatenate([features, np.asarray([sr_exchange], dtype=float)])
+    sr_exchange = float(reaction["Alpha Short Range Exchange"]) + float(reaction["Beta Short Range Exchange"])
+    features = np.concatenate([features, np.asarray([sr_exchange], dtype=float)])
     return features, b_value
 
 
@@ -147,8 +143,7 @@ def build_diff_matrix(
             continue
         diff_features = np.asarray(reaction[diff_grid], dtype=float)
         selected = diff_features[list(spec.a_rows)].reshape(-1)
-        if not spec.semilocal:
-            selected = np.concatenate([selected, np.asarray([0.0], dtype=float)])
+        selected = np.concatenate([selected, np.asarray([0.0], dtype=float)])
         rows.append(selected)
         names.append(row["Reaction"])
     return np.asarray(rows, dtype=float), names
@@ -196,7 +191,6 @@ def build_and_save_training_data(
     manifest = {
         "analysis_source": analysis_source,
         "a_rows": list(spec.a_rows),
-        "semilocal": spec.semilocal,
         "feature_count": spec.feature_count,
         "training_rows": int(a_matrix.shape[0]),
         "dataset_count": len(a_matrix_dict),
