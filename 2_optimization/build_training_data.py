@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from coachopt.processing import FeatureSpec, build_and_save_training_data
+from coachopt.processing import build_and_save_training_data
 from coachopt.utils import load_pickle, read_csv_rows
 
 
@@ -38,14 +38,12 @@ def main(argv: list[str] | None = None) -> int:
         args.training_weights,
         ["Dataset", "datapoints", "weights"],
     )
-    spec = FeatureSpec(a_rows=tuple(args.a_rows))
-
     outputs = build_and_save_training_data(
         reaction_data=reaction_data,
         dataset_eval_rows=dataset_eval_rows,
         training_weight_rows=training_weight_rows,
         output_dir=Path(args.output_dir),
-        spec=spec,
+        a_rows=tuple(args.a_rows),
         diff_grid=args.diff_grid,
     )
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from coachopt.analysis import analyze_run_directory
 from coachopt.constraints import select_diff_constraint_rows
 from coachopt.optimizer import OptimizationConfig, run_optimization_sweep
-from coachopt.processing import FeatureSpec, artifact_grid_suffix, build_and_save_training_data
+from coachopt.processing import artifact_grid_suffix, build_and_save_training_data
 from coachopt.utils import load_pickle, read_csv_frame, read_csv_rows, save_name_array, write_json
 
 
@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
         baseline_errors = baseline_frame.set_index("Dataset")[value_columns].to_dict(orient="index")
     else:
         baseline_errors = None
-    spec = FeatureSpec(a_rows=tuple(args.a_rows))
+    a_rows = tuple(args.a_rows)
     diff_suffix = artifact_grid_suffix("99000590")
 
     processed_dir = Path(args.processed_dir)
@@ -72,12 +72,12 @@ def main(argv: list[str] | None = None) -> int:
         dataset_eval_rows=dataset_eval_rows,
         training_weight_rows=training_weight_rows,
         output_dir=processed_dir,
-        spec=spec,
+        a_rows=a_rows,
     )
 
     pass1_config = OptimizationConfig(
         nonzeros=args.nonzeros,
-        a_rows=spec.a_rows,
+        a_rows=a_rows,
         repeats=args.repeats,
         time_limit=args.time_limit,
         nthreads=args.nthreads,
@@ -108,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
 
     pass2_config = OptimizationConfig(
         nonzeros=args.nonzeros,
-        a_rows=spec.a_rows,
+        a_rows=a_rows,
         repeats=args.repeats,
         time_limit=args.time_limit,
         nthreads=args.nthreads,

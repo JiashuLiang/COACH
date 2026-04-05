@@ -9,7 +9,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "2_optimization"))
 
-from coachopt.processing import FeatureSpec, build_and_save_training_data
+from coachopt.processing import build_and_save_training_data
 from coachopt.utils import read_csv_rows
 
 
@@ -76,7 +76,6 @@ class ProcessingTests(unittest.TestCase):
                     ["Dataset", "datapoints", "weights"],
                 ),
                 output_dir=out_dir,
-                spec=FeatureSpec(),
             )
 
             a_matrix = np.load(out_dir / "A_matrix.npy")

@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "2_optimization"))
 
 from coachopt.analysis import analyze_run_directory
 from coachopt.constraints import select_diff_constraint_rows
-from coachopt.processing import FeatureSpec, build_and_save_training_data
+from coachopt.processing import build_and_save_training_data
 from coachopt.utils import read_csv_rows, save_name_array, write_json
 
 
@@ -73,7 +73,6 @@ class WorkflowSmokeTests(unittest.TestCase):
                     ["Dataset", "datapoints", "weights"],
                 ),
                 output_dir=processed_dir,
-                spec=FeatureSpec(),
             )
 
             a_matrix = np.load(processed_dir / "A_matrix.npy")
