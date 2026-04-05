@@ -62,8 +62,7 @@ This writes:
 
 ```bash
 python3 2_optimization/build_training_data.py \
-  --reaction-data default=processed/raw/reaction_data.dict \
-  --analysis-source default \
+  --reaction-data processed/raw/reaction_data.dict \
   --dataset-eval path/to/dataset_eval.csv \
   --training-weights path/to/training_weights.csv \
   --output-dir processed_data

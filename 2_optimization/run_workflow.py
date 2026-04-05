@@ -13,17 +13,9 @@ from coachopt.processing import FeatureSpec, artifact_grid_suffix, build_and_sav
 from coachopt.utils import load_pickle, read_csv_frame, read_csv_rows, save_name_array, write_json
 
 
-def _parse_source_assignment(value: str) -> tuple[str, str]:
-    if "=" not in value:
-        raise argparse.ArgumentTypeError("reaction data must be provided as SOURCE=PATH")
-    source, path = value.split("=", 1)
-    return source.strip(), path.strip()
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--reaction-data", action="append", required=True, type=_parse_source_assignment)
-    parser.add_argument("--analysis-source", help="Source name used for dataset-level outputs")
+    parser.add_argument("--reaction-data", required=True, help="Path to reaction_data.dict")
     parser.add_argument("--dataset-eval", required=True, help="dataset_eval.csv")
     parser.add_argument("--training-weights", required=True, help="training_weights.csv")
     parser.add_argument("--dataset-info", required=True, help="dataset_info.csv")
@@ -47,15 +39,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    reaction_sources = {source: load_pickle(path) for source, path in args.reaction_data}
-    analysis_source = args.analysis_source or next(iter(reaction_sources))
+    reaction_data = load_pickle(args.reaction_data)
     dataset_eval_rows = read_csv_rows(
         args.dataset_eval,
         ["Reaction", "Dataset", "Reference", "Stoichiometry"],
     )
     training_weight_rows = read_csv_rows(
         args.training_weights,
-        ["Dataset", "Density Source", "datapoints", "weights"],
+        ["Dataset", "datapoints", "weights"],
     )
     dataset_info = read_csv_frame(args.dataset_info, ["Dataset", "Datatype"]).set_index("Dataset").to_dict(
         orient="index"
@@ -77,8 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     pass2_dir = run_root / "pass2"
 
     build_and_save_training_data(
-        reaction_sources=reaction_sources,
-        analysis_source=analysis_source,
+        reaction_data=reaction_data,
         dataset_eval_rows=dataset_eval_rows,
         training_weight_rows=training_weight_rows,
         output_dir=processed_dir,

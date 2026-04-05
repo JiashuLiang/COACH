@@ -57,27 +57,20 @@ class WorkflowSmokeTests(unittest.TestCase):
 
             training_weights_path = root / "training_weights.csv"
             with training_weights_path.open("w", encoding="utf-8", newline="") as handle:
-                writer = csv.DictWriter(
-                    handle, fieldnames=["Dataset", "Density Source", "datapoints", "weights"]
-                )
+                writer = csv.DictWriter(handle, fieldnames=["Dataset", "datapoints", "weights"])
                 writer.writeheader()
-                writer.writerow(
-                    {"Dataset": "DS1", "Density Source": "default", "datapoints": "All", "weights": "1.0"}
-                )
-                writer.writerow(
-                    {"Dataset": "DS2", "Density Source": "default", "datapoints": "All", "weights": "1.0"}
-                )
+                writer.writerow({"Dataset": "DS1", "datapoints": "All", "weights": "1.0"})
+                writer.writerow({"Dataset": "DS2", "datapoints": "All", "weights": "1.0"})
 
             build_and_save_training_data(
-                reaction_sources={"default": reaction_data},
-                analysis_source="default",
+                reaction_data=reaction_data,
                 dataset_eval_rows=read_csv_rows(
                     dataset_eval_path,
                     ["Reaction", "Dataset", "Reference", "Stoichiometry"],
                 ),
                 training_weight_rows=read_csv_rows(
                     training_weights_path,
-                    ["Dataset", "Density Source", "datapoints", "weights"],
+                    ["Dataset", "datapoints", "weights"],
                 ),
                 output_dir=processed_dir,
                 spec=FeatureSpec(),

@@ -8,8 +8,7 @@ This directory contains the maintained script-first COACH optimization workflow.
 
    ```bash
    python3 2_optimization/build_training_data.py \
-     --reaction-data default=processed/raw/reaction_data.dict \
-     --analysis-source default \
+     --reaction-data processed/raw/reaction_data.dict \
      --dataset-eval path/to/dataset_eval.csv \
      --training-weights path/to/training_weights.csv \
      --output-dir processed_data
@@ -63,8 +62,7 @@ This directory contains the maintained script-first COACH optimization workflow.
 
 ```bash
 python3 2_optimization/run_workflow.py \
-  --reaction-data default=processed/raw/reaction_data.dict \
-  --analysis-source default \
+  --reaction-data processed/raw/reaction_data.dict \
   --dataset-eval path/to/dataset_eval.csv \
   --training-weights path/to/training_weights.csv \
   --dataset-info path/to/dataset_info.csv \
@@ -80,7 +78,7 @@ Start from the header templates in [`templates/`](templates) and populate them w
 - `dataset_eval.csv`
   - Required columns: `Reaction,Dataset,Reference,Stoichiometry`
 - `training_weights.csv`
-  - Required columns: `Dataset,Density Source,datapoints,weights`
+  - Required columns: `Dataset,datapoints,weights`
   - `datapoints` supports `All` or a comma-separated reaction list.
   - `weights` supports a numeric value, `Shrink`, or `Shrink2`.
 - `dataset_info.csv`

@@ -75,7 +75,7 @@ def _weights_for_dataset(weight_spec: str, count: int) -> list[float]:
 
 
 def build_training_arrays(
-    reaction_sources: dict[str, dict[str, dict]],
+    reaction_data: dict[str, dict],
     dataset_eval_rows: list[dict],
     training_weight_rows: list[dict],
     spec: FeatureSpec,
@@ -88,10 +88,6 @@ def build_training_arrays(
 
     for row in training_weight_rows:
         dataset = row["Dataset"]
-        source = row["Density Source"]
-        if source not in reaction_sources:
-            available = ", ".join(sorted(reaction_sources))
-            raise KeyError(f"Unknown Density Source {source!r}; available sources: {available}")
         if dataset not in reactions_by_dataset:
             raise KeyError(f"Dataset {dataset!r} was not found in dataset_eval metadata")
 
@@ -112,9 +108,8 @@ def build_training_arrays(
 
         weights = _weights_for_dataset(row["weights"], len(reaction_ids))
         for reaction_id in reaction_ids:
-            reaction_data = reaction_sources[source]
             if reaction_id not in reaction_data:
-                raise KeyError(f"Reaction {reaction_id!r} not found in source {source!r}")
+                raise KeyError(f"Reaction {reaction_id!r} not found in reaction_data")
             features, target = _feature_vector(reaction_data[reaction_id], spec)
             a_matrix.append(features)
             b_vec.append(target)
@@ -159,24 +154,19 @@ def artifact_grid_suffix(grid_key: str) -> str:
 
 
 def build_and_save_training_data(
-    reaction_sources: dict[str, dict[str, dict]],
-    analysis_source: str,
+    reaction_data: dict[str, dict],
     dataset_eval_rows: list[dict],
     training_weight_rows: list[dict],
     output_dir: str | Path,
     spec: FeatureSpec,
     diff_grid: str = DEFAULT_GRID_KEY,
 ) -> dict[str, str]:
-    if analysis_source not in reaction_sources:
-        raise KeyError(f"Analysis source {analysis_source!r} was not supplied")
-
     output_dir = ensure_directory(output_dir)
-    analysis_reactions = reaction_sources[analysis_source]
-    a_matrix_dict, b_vec_dict = build_dataset_matrices(analysis_reactions, dataset_eval_rows, spec)
+    a_matrix_dict, b_vec_dict = build_dataset_matrices(reaction_data, dataset_eval_rows, spec)
     b_vec, a_matrix, weight_vec, name_list = build_training_arrays(
-        reaction_sources, dataset_eval_rows, training_weight_rows, spec
+        reaction_data, dataset_eval_rows, training_weight_rows, spec
     )
-    diff_matrix, diff_names = build_diff_matrix(analysis_reactions, dataset_eval_rows, spec, diff_grid=diff_grid)
+    diff_matrix, diff_names = build_diff_matrix(reaction_data, dataset_eval_rows, spec, diff_grid=diff_grid)
     diff_suffix = artifact_grid_suffix(diff_grid)
 
     np.save(output_dir / "A_matrix.npy", a_matrix)
@@ -189,7 +179,6 @@ def build_and_save_training_data(
     save_name_array(output_dir / f"name_list_diff_{diff_suffix}.npy", diff_names)
 
     manifest = {
-        "analysis_source": analysis_source,
         "a_rows": list(spec.a_rows),
         "feature_count": spec.feature_count,
         "training_rows": int(a_matrix.shape[0]),

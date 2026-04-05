@@ -60,27 +60,20 @@ class ProcessingTests(unittest.TestCase):
                 writer.writerow({"Reaction": "R3", "Dataset": "DS2", "Reference": "3.0", "Stoichiometry": "1,C"})
 
             with weights_path.open("w", encoding="utf-8", newline="") as handle:
-                writer = csv.DictWriter(
-                    handle, fieldnames=["Dataset", "Density Source", "datapoints", "weights"]
-                )
+                writer = csv.DictWriter(handle, fieldnames=["Dataset", "datapoints", "weights"])
                 writer.writeheader()
-                writer.writerow(
-                    {"Dataset": "DS1", "Density Source": "default", "datapoints": "All", "weights": "2.0"}
-                )
-                writer.writerow(
-                    {"Dataset": "DS2", "Density Source": "default", "datapoints": "R3", "weights": "Shrink"}
-                )
+                writer.writerow({"Dataset": "DS1", "datapoints": "All", "weights": "2.0"})
+                writer.writerow({"Dataset": "DS2", "datapoints": "R3", "weights": "Shrink"})
 
             outputs = build_and_save_training_data(
-                reaction_sources={"default": reaction_data},
-                analysis_source="default",
+                reaction_data=reaction_data,
                 dataset_eval_rows=read_csv_rows(
                     dataset_eval_path,
                     ["Reaction", "Dataset", "Reference", "Stoichiometry"],
                 ),
                 training_weight_rows=read_csv_rows(
                     weights_path,
-                    ["Dataset", "Density Source", "datapoints", "weights"],
+                    ["Dataset", "datapoints", "weights"],
                 ),
                 output_dir=out_dir,
                 spec=FeatureSpec(),
