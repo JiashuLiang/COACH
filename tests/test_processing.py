@@ -9,7 +9,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "2_optimization"))
 
-from coachopt.processing import build_and_save_training_data
+from coachopt.processing import build_and_save_data
 from coachopt.utils import read_csv_rows
 
 
@@ -34,7 +34,7 @@ def synthetic_reaction(offset: float) -> dict:
 
 
 class ProcessingTests(unittest.TestCase):
-    def test_build_and_save_training_data_preserves_legacy_outputs(self):
+    def test_build_and_save_data_preserves_legacy_outputs(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             reaction_path = root / "reaction_data.dict"
@@ -65,7 +65,7 @@ class ProcessingTests(unittest.TestCase):
                 writer.writerow({"Dataset": "DS1", "datapoints": "All", "weights": "2.0"})
                 writer.writerow({"Dataset": "DS2", "datapoints": "R3", "weights": "Shrink"})
 
-            outputs = build_and_save_training_data(
+            outputs = build_and_save_data(
                 reaction_data=reaction_data,
                 dataset_eval_rows=read_csv_rows(
                     dataset_eval_path,

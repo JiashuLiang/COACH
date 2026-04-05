@@ -1,4 +1,4 @@
-"""Training-data construction from reaction dictionaries plus CSV metadata."""
+"""Data-artifact construction from reaction dictionaries plus CSV metadata."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def artifact_grid_suffix(grid_key: str) -> str:
     return f"{prefix}{remainder}"
 
 
-def build_and_save_training_data(
+def build_and_save_data(
     reaction_data: dict[str, dict],
     dataset_eval_rows: list[dict],
     training_weight_rows: list[dict],

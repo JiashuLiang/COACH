@@ -4,10 +4,10 @@ This directory contains the maintained script-first COACH optimization workflow.
 
 ## Workflow
 
-1. Build training artifacts from `reaction_data.dict` plus populated CSV metadata:
+1. Prepare training and test data from `reaction_data.dict` plus populated CSV metadata:
 
    ```bash
-   python3 2_optimization/build_training_data.py \
+   python3 2_optimization/build_data.py \
      --reaction-data processed/raw/reaction_data.dict \
      --dataset-eval path/to/dataset_eval.csv \
      --training-weights path/to/training_weights.csv \

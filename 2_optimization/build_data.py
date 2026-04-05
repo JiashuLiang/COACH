@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Build legacy-compatible training arrays from CSV metadata and reaction_data.dict."""
+"""Build legacy-compatible optimization artifacts from CSV metadata and reaction_data.dict."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-from coachopt.processing import build_and_save_training_data
+from coachopt.processing import build_and_save_data
 from coachopt.utils import load_pickle, read_csv_rows
 
 
@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
         args.training_weights,
         ["Dataset", "datapoints", "weights"],
     )
-    outputs = build_and_save_training_data(
+    outputs = build_and_save_data(
         reaction_data=reaction_data,
         dataset_eval_rows=dataset_eval_rows,
         training_weight_rows=training_weight_rows,
@@ -47,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
         diff_grid=args.diff_grid,
     )
 
-    print(f"Wrote training artifacts to {args.output_dir}")
+    print(f"Wrote data artifacts to {args.output_dir}")
     print(f"A matrix: {outputs['A_matrix']}")
     print(f"b vector: {outputs['b_vec']}")
     print(f"weights: {outputs['weight_vec']}")

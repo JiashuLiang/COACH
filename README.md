@@ -12,7 +12,7 @@ The maintained baseline pipeline is:
 
 1. Generate one PySCF text output per species with [`1_data_generation/pyscf_integrated_dv.py`](1_data_generation/pyscf_integrated_dv.py).
 2. Parse those outputs into `raw_data.dict` and `reaction_data.dict` with [`1_data_generation/extract_data.py`](1_data_generation/extract_data.py).
-3. Build legacy-compatible training arrays from reaction data plus CSV metadata with [`2_optimization/build_training_data.py`](2_optimization/build_training_data.py).
+3. Prepare training and test data from reaction data plus CSV metadata with [`2_optimization/build_data.py`](2_optimization/build_data.py).
 4. Run mixed-integer optimization with [`2_optimization/run_mio.py`](2_optimization/run_mio.py).
 5. Select manuscript-style grid-sensitivity constraints with [`2_optimization/select_grid_constraints.py`](2_optimization/select_grid_constraints.py).
 6. Run mixed-integer optimization again with  grid-sensitivity constraints with [`2_optimization/run_mio.py`](2_optimization/run_mio.py).
@@ -58,17 +58,17 @@ This writes:
 - `processed/raw/failed_files.log` if parsing failures occur
 - `processed/raw/failed_reactions.log` if reactions cannot be assembled
 
-### 3. Build training artifacts
+### 3. Prepare training and test data
 
 ```bash
-python3 2_optimization/build_training_data.py \
+python3 2_optimization/build_data.py \
   --reaction-data processed/raw/reaction_data.dict \
   --dataset-eval path/to/dataset_eval.csv \
   --training-weights path/to/training_weights.csv \
   --output-dir processed_data
 ```
 
-This writes the legacy-compatible core artifacts:
+This prepare training and test data, including the per-dataset dictionaries used in downstream analysis and testing:
 
 - `A_matrix.npy`
 - `b_vec.npy`
