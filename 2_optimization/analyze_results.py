@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 
 from coachopt.analysis import analyze_run_directory
-from coachopt.metadata import load_baseline_error_csv, load_dataset_info_csv
+from coachopt.utils import read_csv_frame
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -24,8 +24,19 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    dataset_info = load_dataset_info_csv(args.dataset_info) if args.dataset_info else None
-    baseline_errors = load_baseline_error_csv(args.baseline_errors) if args.baseline_errors else None
+    dataset_info = (
+        read_csv_frame(args.dataset_info, ["Dataset", "Datatype"]).set_index("Dataset").to_dict(orient="index")
+        if args.dataset_info
+        else None
+    )
+    if args.baseline_errors:
+        baseline_frame = read_csv_frame(args.baseline_errors, ["Dataset"])
+        value_columns = [column for column in baseline_frame.columns if column != "Dataset"]
+        if not value_columns:
+            raise ValueError(f"{args.baseline_errors}: expected at least one baseline metric column")
+        baseline_errors = baseline_frame.set_index("Dataset")[value_columns].to_dict(orient="index")
+    else:
+        baseline_errors = None
     outputs = analyze_run_directory(
         run_dir=args.run_dir,
         processed_dir=args.processed_dir,

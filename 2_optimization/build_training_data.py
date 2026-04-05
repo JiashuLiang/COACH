@@ -6,9 +6,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from coachopt.metadata import load_dataset_eval_csv, load_training_weights_csv
 from coachopt.processing import FeatureSpec, build_and_save_training_data
-from coachopt.utils import load_pickle
+from coachopt.utils import load_pickle, read_csv_rows
 
 
 def _parse_source_assignment(value: str) -> tuple[str, str]:
@@ -46,8 +45,14 @@ def main(argv: list[str] | None = None) -> int:
 
     reaction_sources = {source: load_pickle(path) for source, path in args.reaction_data}
     analysis_source = args.analysis_source or next(iter(reaction_sources))
-    dataset_eval_rows = load_dataset_eval_csv(args.dataset_eval)
-    training_weight_rows = load_training_weights_csv(args.training_weights)
+    dataset_eval_rows = read_csv_rows(
+        args.dataset_eval,
+        ["Reaction", "Dataset", "Reference", "Stoichiometry"],
+    )
+    training_weight_rows = read_csv_rows(
+        args.training_weights,
+        ["Dataset", "Density Source", "datapoints", "weights"],
+    )
     spec = FeatureSpec(a_rows=tuple(args.a_rows))
 
     outputs = build_and_save_training_data(

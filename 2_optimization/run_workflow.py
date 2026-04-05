@@ -8,10 +8,9 @@ from pathlib import Path
 
 from coachopt.analysis import analyze_run_directory
 from coachopt.constraints import select_diff_constraint_rows
-from coachopt.metadata import load_baseline_error_csv, load_dataset_eval_csv, load_dataset_info_csv, load_training_weights_csv
 from coachopt.optimizer import OptimizationConfig, run_optimization_sweep
 from coachopt.processing import FeatureSpec, artifact_grid_suffix, build_and_save_training_data
-from coachopt.utils import load_pickle, save_name_array, write_json
+from coachopt.utils import load_pickle, read_csv_frame, read_csv_rows, save_name_array, write_json
 
 
 def _parse_source_assignment(value: str) -> tuple[str, str]:
@@ -50,10 +49,25 @@ def main(argv: list[str] | None = None) -> int:
 
     reaction_sources = {source: load_pickle(path) for source, path in args.reaction_data}
     analysis_source = args.analysis_source or next(iter(reaction_sources))
-    dataset_eval_rows = load_dataset_eval_csv(args.dataset_eval)
-    training_weight_rows = load_training_weights_csv(args.training_weights)
-    dataset_info = load_dataset_info_csv(args.dataset_info)
-    baseline_errors = load_baseline_error_csv(args.baseline_errors) if args.baseline_errors else None
+    dataset_eval_rows = read_csv_rows(
+        args.dataset_eval,
+        ["Reaction", "Dataset", "Reference", "Stoichiometry"],
+    )
+    training_weight_rows = read_csv_rows(
+        args.training_weights,
+        ["Dataset", "Density Source", "datapoints", "weights"],
+    )
+    dataset_info = read_csv_frame(args.dataset_info, ["Dataset", "Datatype"]).set_index("Dataset").to_dict(
+        orient="index"
+    )
+    if args.baseline_errors:
+        baseline_frame = read_csv_frame(args.baseline_errors, ["Dataset"])
+        value_columns = [column for column in baseline_frame.columns if column != "Dataset"]
+        if not value_columns:
+            raise ValueError(f"{args.baseline_errors}: expected at least one baseline metric column")
+        baseline_errors = baseline_frame.set_index("Dataset")[value_columns].to_dict(orient="index")
+    else:
+        baseline_errors = None
     spec = FeatureSpec(a_rows=tuple(args.a_rows))
     diff_suffix = artifact_grid_suffix("99000590")
 

@@ -9,8 +9,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "2_optimization"))
 
-from coachopt.metadata import load_dataset_eval_csv, load_training_weights_csv
 from coachopt.processing import FeatureSpec, build_and_save_training_data
+from coachopt.utils import read_csv_rows
 
 
 def synthetic_reaction(offset: float) -> dict:
@@ -74,8 +74,14 @@ class ProcessingTests(unittest.TestCase):
             outputs = build_and_save_training_data(
                 reaction_sources={"default": reaction_data},
                 analysis_source="default",
-                dataset_eval_rows=load_dataset_eval_csv(dataset_eval_path),
-                training_weight_rows=load_training_weights_csv(weights_path),
+                dataset_eval_rows=read_csv_rows(
+                    dataset_eval_path,
+                    ["Reaction", "Dataset", "Reference", "Stoichiometry"],
+                ),
+                training_weight_rows=read_csv_rows(
+                    weights_path,
+                    ["Dataset", "Density Source", "datapoints", "weights"],
+                ),
                 output_dir=out_dir,
                 spec=FeatureSpec(),
             )
