@@ -13,9 +13,10 @@ The maintained baseline pipeline is:
 1. Generate one PySCF text output per species with [`1_data_generation/pyscf_integrated_dv.py`](1_data_generation/pyscf_integrated_dv.py).
 2. Parse those outputs into `raw_data.dict` and `reaction_data.dict` with [`1_data_generation/extract_data.py`](1_data_generation/extract_data.py).
 3. Build legacy-compatible training arrays from reaction data plus CSV metadata with [`2_optimization/build_training_data.py`](2_optimization/build_training_data.py).
-4. Run mixed-integer optimization in two passes with [`2_optimization/run_mio.py`](2_optimization/run_mio.py).
+4. Run mixed-integer optimization with [`2_optimization/run_mio.py`](2_optimization/run_mio.py).
 5. Select manuscript-style grid-sensitivity constraints with [`2_optimization/select_grid_constraints.py`](2_optimization/select_grid_constraints.py).
-6. Analyze fitted coefficient sets with [`2_optimization/analyze_results.py`](2_optimization/analyze_results.py).
+6. Run mixed-integer optimization again with  grid-sensitivity constraints with [`2_optimization/run_mio.py`](2_optimization/run_mio.py).
+7. Analyze fitted coefficient sets with [`2_optimization/analyze_results.py`](2_optimization/analyze_results.py).
 
 ## Requirements
 
