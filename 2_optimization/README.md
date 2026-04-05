@@ -56,21 +56,6 @@ This directory contains the maintained script-first COACH optimization workflow.
      --dataset-info path/to/dataset_info.csv
    ```
 
-## One-shot Runner
-
-[`run_workflow.py`](run_workflow.py) orchestrates preprocessing, pass 1, row selection, pass 2, and analysis in one command:
-
-```bash
-python3 2_optimization/run_workflow.py \
-  --reaction-data processed/raw/reaction_data.dict \
-  --dataset-eval path/to/dataset_eval.csv \
-  --training-weights path/to/training_weights.csv \
-  --dataset-info path/to/dataset_info.csv \
-  --processed-dir processed_data \
-  --run-root runs/full \
-  -n 24 32 40
-```
-
 ## Metadata Contract
 
 Start from the header templates in [`templates/`](templates) and populate them with your project data.
@@ -116,3 +101,16 @@ Analysis writes:
 
 - The cleaned baseline workflow is the manuscript baseline only: 289 parameters, `A_rows = [64, 153, 166]`, and one grid-sensitive second pass against the 99,590 grid.
 - Gurobi is required only for optimization. Preprocessing, constraint selection, and most analysis utilities do not require it.
+
+## `run_mio.py` Options
+
+The examples above show the minimal baseline commands. [`run_mio.py`](run_mio.py) also supports these optional flags:
+
+- `--config_file`: load defaults from a JSON or YAML config file.
+- `--nonzeros`, `--nthreads`, `--repeats`, `--time_limit`, `--random_seed`, `--verbose`: control sweep size and solver runtime behavior.
+- `--input_dir`, `--out_dir`: choose where optimization reads inputs and writes outputs.
+- `--A_rows`: override the three fitting rows used to define the 289-parameter baseline.
+- `--bvec_name`, `--Amatrix_name`, `--weight_name`, `--diff_name`: override input artifact filenames inside `--input_dir`.
+- `--with_diff`, `--grid_thresh`: enable diff-matrix constraints and set the threshold in kcal/mol.
+- `--warm_start_dir`, `--warm_start_file`, `--no_reference_warm_starts`: control warm-start sources.
+- `--with_diff2`, `--diff2_name`, `--grid_thresh2`: compatibility flags retained by the script. They are accepted, but the cleaned baseline workflow ignores them.

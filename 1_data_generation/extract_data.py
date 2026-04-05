@@ -41,12 +41,12 @@ REQUIRED_ENERGY_KEYS = {
 }
 
 
-def parse_args():
+def build_parser():
     parser = argparse.ArgumentParser(description="Extract training data from PySCF one-file text outputs.")
-    parser.add_argument("--input_data_dir", required=True, help="Directory containing one PySCF text file per molecule.")
-    parser.add_argument("--DatasetEval", required=True, help="DatasetEval CSV/TSV/XLSX file.")
-    parser.add_argument("--output_dir", default=".", help="Output directory for raw_data.dict and reaction_data.dict.")
-    return parser.parse_args()
+    parser.add_argument("--input-data-dir", required=True, help="Directory containing one PySCF text file per molecule.")
+    parser.add_argument("--dataset-eval", required=True, help="Dataset evaluation CSV file.")
+    parser.add_argument("--output-dir", default=".", help="Output directory for raw_data.dict and reaction_data.dict.")
+    return parser
 
 
 def _parse_float_after_equals(line):
@@ -116,29 +116,25 @@ def parse_pyscf_output(path):
 
 
 def load_dataset_eval(path):
-    suffix = path.suffix.lower()
-    if suffix in {".csv", ".tsv"}:
-        delimiter = "\t" if suffix == ".tsv" else ","
-        with path.open("r", encoding="utf-8", newline="") as fh:
-            rows = list(csv.DictReader(fh, delimiter=delimiter))
-    elif suffix in {".xlsx", ".xls"}:
-        import pandas as pd
+    if path.suffix.lower() != ".csv":
+        raise ValueError(f"{path}: dataset_eval must be a CSV file")
 
-        rows = pd.read_excel(path).to_dict(orient="records")
-    else:
-        raise ValueError(f"Unsupported DatasetEval format: {path}")
+    with path.open("r", encoding="utf-8", newline="") as fh:
+        reader = csv.DictReader(fh)
+        fieldnames = reader.fieldnames or []
+        required_columns = ["Reaction", "Reference", "Stoichiometry"]
+        missing = [column for column in required_columns if column not in fieldnames]
+        if missing:
+            raise ValueError(f"{path}: missing required columns: {', '.join(missing)}")
+        rows = list(reader)
 
     normalized_rows = []
     for idx, row in enumerate(rows):
-        reaction = row.get("Reaction") or row.get("reaction")
-        if not reaction:
-            reaction = str(idx)
+        reaction = row.get("Reaction")
         reference = row.get("Reference")
-        if reference is None:
-            reference = row.get("Reference Energy")
         stoichiometry = row.get("Stoichiometry")
-        if reference is None or stoichiometry is None:
-            raise ValueError(f"{path}: row {idx} is missing Reference/Reference Energy or Stoichiometry")
+        if not reaction or reference is None or stoichiometry is None:
+            raise ValueError(f"{path}: row {idx} is missing Reaction, Reference, or Stoichiometry")
         normalized_rows.append(
             {
                 "Reaction": str(reaction),
@@ -188,10 +184,10 @@ def write_log(path, messages):
         path.write_text("\n".join(messages) + "\n", encoding="utf-8")
 
 
-def main():
-    args = parse_args()
+def main(argv=None):
+    args = build_parser().parse_args(argv)
     input_data_dir = Path(args.input_data_dir).resolve()
-    dataset_eval_path = Path(args.DatasetEval).resolve()
+    dataset_eval_path = Path(args.dataset_eval).resolve()
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 

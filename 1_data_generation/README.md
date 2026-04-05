@@ -13,25 +13,25 @@ This directory contains the maintained PySCF-side data-generation and extraction
 - `numpy`
 - `scipy`
 - `pyscf`
-- `pandas` only if `--DatasetEval` points to `.xlsx` or `.xls`
+- `pandas` 
 
 ## Expected Inputs
 
 `extract_data.py` expects:
 
-- one `.txt` file per species under `--input_data_dir`
-- a populated `DatasetEval` file describing reactions and stoichiometries
+- one `.txt` file per species under `--input-data-dir`
+- a populated CSV `dataset_eval` file describing reactions and stoichiometries
 - each species file to contain the energy labels and integratedDV matrix blocks consumed by the parser
 
-The parser recognizes CSV, TSV, and Excel `DatasetEval` files, but the maintained optimization workflow downstream expects CSV metadata.
+The maintained interface is CSV-only and expects `Reaction`, `Reference`, and `Stoichiometry` columns.
 
 ## Usage
 
 ```bash
 python3 1_data_generation/extract_data.py \
-  --input_data_dir path/to/pyscf_outputs \
-  --DatasetEval path/to/dataset_eval.csv \
-  --output_dir processed/raw
+  --input-data-dir path/to/pyscf_outputs \
+  --dataset-eval path/to/dataset_eval.csv \
+  --output-dir processed/raw
 ```
 
 The script writes:

@@ -24,7 +24,7 @@ The maintained baseline pipeline is:
 - `numpy`
 - `scipy` and `pyscf` for the data-generation stage
 - `gurobipy` plus a working Gurobi license for optimization
-- `pandas` only if you plan to pass Excel `DatasetEval` files to `extract_data.py`
+- `pandas`
 
 ## Metadata Setup
 
@@ -46,9 +46,9 @@ Adapt [`1_data_generation/pyscf_integrated_dv.py`](1_data_generation/pyscf_integ
 
 ```bash
 python3 1_data_generation/extract_data.py \
-  --input_data_dir path/to/pyscf_outputs \
-  --DatasetEval path/to/dataset_eval.csv \
-  --output_dir processed/raw
+  --input-data-dir path/to/pyscf_outputs \
+  --dataset-eval path/to/dataset_eval.csv \
+  --output-dir processed/raw
 ```
 
 This writes:
