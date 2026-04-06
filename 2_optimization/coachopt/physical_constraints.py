@@ -1,4 +1,12 @@
-"""Helpers for constructing manuscript-style physical constraint matrices."""
+"""
+Helpers for constructing manuscript-style constraint matrices.
+0) exchange(0,0) + sr_ex = 1.0 => exchange(0,0) between 0 and 1.0
+1) |beta[i]|<10 for any i
+2) 0<=gx<=2.2146
+3) -10<=gcss<=10
+4)-10<=gcos<=10,
+5) gx<=1.479 (alpha = 0)
+"""
 
 from __future__ import annotations
 
@@ -34,8 +42,11 @@ def legendre_expansion(values: np.ndarray, order: int) -> np.ndarray:
     return output.T
 
 
-def u_to_s2(values: np.ndarray) -> np.ndarray:
-    """Map bounded exchange variable ``u`` back to the reduced gradient ``s^2``."""
+def ux_to_s2(values: np.ndarray) -> np.ndarray:
+    """
+    u = 0.004*s2/(1 + 0.004*s2)
+    s2 = 250 * u/(1 - u)
+    """
     return 250.0 * values / (1.0 - values)
 
 
@@ -65,7 +76,8 @@ def expansion(us: np.ndarray, ws: np.ndarray, choice: int, with_nonuniform_scali
     for i in range(us.shape[0]):
         scale = 1.0
         if with_nonuniform_scaling:
-            s2_value = u_to_s2(np.asarray([us[i]], dtype=float))[0]
+            # The coefficient is converted from SCANs's: (2(6\pi^2)^{1/3})^(1/2) * 4.9479 = 13.815
+            s2_value = ux_to_s2(np.asarray([us[i]], dtype=float))[0]
             scale = 1.0 - np.exp(-13.815 / s2_value ** 0.25)
         for j in range(ws.shape[0]):
             expansions.append(scale * np.outer(ws_expanded[j], us_expanded[i]).reshape(-1))
@@ -90,54 +102,21 @@ def build_physical_constraints(a_rows: tuple[int, int, int]) -> dict[str, np.nda
     opposite_spin_bounds = expansion(us, ws, opposite_spin_choice)
 
     if exchange_choice // 9 == 0:
-        s2_values = np.asarray(
-            [
-                0.3,
-                0.6,
-                1.2,
-                1.8,
-                2.4,
-                2.7,
-                3.0,
-                3.3,
-                3.6,
-                3.9,
-                4.2,
-                4.5,
-                4.8,
-                5.2,
-                5.6,
-                6.0,
-                6.6,
-                7.2,
-                7.8,
-                8.4,
-                9.0,
-                10.2,
-                11.4,
-                12.0,
-                13.2,
-                15.0,
-                18.0,
-                24.0,
-                36.0,
-                60.0,
-                120.0,
-            ]
-        )
+        s2_values = np.asarray( [0.3, 0.6, 1.2, 1.8, 2.4, 2.7, 3.0, 3.3, 3.6, 3.9, 4.2, 4.5, 4.8, 5.2, 5.6, 6.0,\
+        6.6, 7.2, 7.8, 8.4, 9.0, 10.2, 11.4, 12.0, 13.2, 15.0, 18, 24, 36, 60, 120], dtype=float)
         constant = 5.0 / 3.0 / 4.0 / (6.0 * np.pi * np.pi) ** (2.0 / 3.0)
         ux_array = 0.004 * s2_values / (1.0 + 0.004 * s2_values)
         ws_array = (1.0 - s2_values * constant) / (1.0 + s2_values * constant)
         us_expanded, ws_expanded = expansion_assist(ux_array, ws_array, exchange_choice)
-        constraint5 = []
+        gx_one_constraint = []
         for idx, s2_value in enumerate(s2_values):
             scale = 1.0
             if with_scaling:
                 scale = 1.0 - np.exp(-13.815 / s2_value ** 0.25)
-            constraint5.append(scale * np.outer(ws_expanded[idx], us_expanded[idx]).reshape(-1))
-        constraint5_array = np.asarray(constraint5, dtype=float)
+            gx_one_constraint.append(scale * np.outer(ws_expanded[idx], us_expanded[idx]).reshape(-1))
+        gx_one_constraint_array = np.asarray(gx_one_constraint, dtype=float)
     else:
-        constraint5_array = expansion(
+        gx_one_constraint_array = expansion(
             np.asarray([0.001, 0.01, 0.1, 0.15, 0.22, 0.3, 0.5, 0.6, 0.7, 0.85, 0.95, 0.99, 0.999]),
             np.asarray([-1.0]),
             exchange_choice,
@@ -149,5 +128,5 @@ def build_physical_constraints(a_rows: tuple[int, int, int]) -> dict[str, np.nda
         "exchange_bounds": exchange_bounds,
         "same_spin_bounds": same_spin_bounds,
         "opposite_spin_bounds": opposite_spin_bounds,
-        "constraint5": constraint5_array,
+        "gx_one_constraint": gx_one_constraint_array,
     }

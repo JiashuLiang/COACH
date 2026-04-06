@@ -150,15 +150,15 @@ def _solve_single_mio(
         model.addConstr(ex_rel @ beta[:96] + beta[-1] == 1.0, name="UEG_exchange00_constraint")
         model.addConstr(beta[-1] <= 1.0, name="exchange00_max_constraint")
         model.addConstr(beta[-1] >= 0.0, name="exchange00_min_constraint")
+        model.addConstr((constraints["gx_one_constraint"] - 1.479 * ex_rel) @ beta[:96] <= 0.0, name="gx_one_constraint")
 
         model.addConstr((constraints["exchange_bounds"] - 2.2146  * ex_rel) @ beta[:96] <= 0, name="gx_max_constraint")
         model.addConstr(constraints["exchange_bounds"] @ beta[:96] >= 0, name="gx_min_constraint")
+        
         model.addConstr(constraints["same_spin_bounds"] @ beta[96:192] <= 10, name="gcss_max_constraint")
         model.addConstr(constraints["same_spin_bounds"] @ beta[96:192] >= -10, name="gcss_min_constraint")
         model.addConstr(constraints["opposite_spin_bounds"] @ beta[192:288] <= 10, name="gcos_max_constraint")
         model.addConstr(constraints["opposite_spin_bounds"] @ beta[192:288] >= -10, name="gcos_min_constraint")
-
-        model.addConstr((constraints["constraint5"] - 1.479 * ex_rel) @ beta[:96] <= 0.0, name="gx_one_constraint")
 
 
         # Add diff constraints |diff * beta| <= 0.015 kcal/mol (99590 vs 250974)
