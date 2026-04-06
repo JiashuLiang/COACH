@@ -12,6 +12,7 @@ from coachopt.utils import load_pickle, read_csv_frame
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for preprocessing optimization inputs."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--reaction-data",
@@ -27,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Validate metadata inputs and write NumPy/pickle preprocessing artifacts."""
     parser = build_parser()
     args = parser.parse_args(argv)
 

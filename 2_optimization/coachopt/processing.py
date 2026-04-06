@@ -15,10 +15,12 @@ from .utils import ensure_directory, save_name_array, save_pickle, write_json
 
 
 def feature_count(a_rows: tuple[int, ...]) -> int:
+    """Return the 289-feature width for the requested fitting rows."""
     return len(a_rows) * 96 + 1
 
 
 def _feature_vector(reaction: dict, a_rows: tuple[int, ...]) -> tuple[np.ndarray, float]:
+    """Flatten selected fitting rows and append the short-range exchange feature."""
     fitting = np.asarray(reaction["Fitting"], dtype=float)
     if fitting.ndim != 2:
         raise ValueError("reaction['Fitting'] must be a 2D array")
@@ -34,6 +36,7 @@ def _feature_vector(reaction: dict, a_rows: tuple[int, ...]) -> tuple[np.ndarray
 
 
 def _weights_for_dataset(weight_spec: str, count: int) -> list[float]:
+    """Expand a legacy weight specification into one scalar per reaction."""
     if weight_spec == "Shrink":
         return (1.0 / np.sqrt(np.arange(1, count + 1))).tolist()
     if weight_spec == "Shrink2":
@@ -59,6 +62,7 @@ def build_and_save_data(
     a_rows: tuple[int, ...] = DEFAULT_A_ROWS,
     diff_grid: str = DEFAULT_GRID_KEY,
 ) -> dict[str, str]:
+    """Build all preprocessing artifacts expected by the cleaned optimization pipeline."""
     by_reaction = {
         row.Reaction: {"Dataset": row.Dataset}
         for row in dataset_eval.itertuples(index=False)
@@ -88,6 +92,8 @@ def build_and_save_data(
         if diff_grid in reaction:
             diff_features = np.asarray(reaction[diff_grid], dtype=float)
             selected = diff_features[list(a_rows)].reshape(-1)
+            # The final feature is the SR-exchange scalar, which is not part of
+            # grid-difference constraints, so the diff row gets a trailing zero.
             diff_rows.append(np.concatenate([selected, np.asarray([0.0], dtype=float)]))
             diff_names.append(reaction_id)
 

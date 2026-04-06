@@ -1,3 +1,5 @@
+"""Build molecule- and reaction-level training artifacts from PySCF text outputs."""
+
 import argparse
 import csv
 import pickle
@@ -42,6 +44,7 @@ REQUIRED_ENERGY_KEYS = {
 
 
 def build_parser():
+    """Create the command-line parser for the extraction workflow."""
     parser = argparse.ArgumentParser(description="Extract training data from PySCF one-file text outputs.")
     parser.add_argument("--input-data-dir", required=True, help="Directory containing one PySCF text file per molecule.")
     parser.add_argument("--dataset-eval", required=True, help="Dataset evaluation CSV file.")
@@ -50,10 +53,12 @@ def build_parser():
 
 
 def _parse_float_after_equals(line):
+    """Parse the first numeric token appearing after an equals sign."""
     return float(line.split("=", 1)[1].strip().split()[0])
 
 
 def parse_pyscf_output(path):
+    """Parse one merged PySCF text file into the legacy molecule artifact schema."""
     lines = path.read_text(encoding="utf-8").splitlines()
     info = {
         "Spin_consistent": None,
@@ -110,12 +115,15 @@ def parse_pyscf_output(path):
 
     for grid_label in grid_labels:
         if grid_label != "Fitting":
+            # Downstream optimization expects non-fitting grids to store deltas
+            # relative to the fitting grid rather than raw integratedDV values.
             info[grid_label] = info[grid_label] - info["Fitting"]
 
     return info
 
 
 def load_dataset_eval(path):
+    """Load the maintained dataset-evaluation CSV with normalized field types."""
     if path.suffix.lower() != ".csv":
         raise ValueError(f"{path}: dataset_eval must be a CSV file")
 
@@ -146,10 +154,12 @@ def load_dataset_eval(path):
 
 
 def is_supported_value(value):
+    """Return whether a molecule-level value can participate in reaction sums."""
     return isinstance(value, np.ndarray) or (isinstance(value, (int, float, np.floating)) and not isinstance(value, bool))
 
 
 def calculate_reaction(row, raw_data):
+    """Assemble one reaction entry by applying stoichiometric coefficients to species data."""
     tokens = [token.strip() for token in row["Stoichiometry"].split(",") if token.strip()]
     if len(tokens) % 2 != 0:
         raise ValueError(f"{row['Reaction']}: invalid Stoichiometry field")
@@ -175,16 +185,19 @@ def calculate_reaction(row, raw_data):
 
 
 def write_pickle(path, obj):
+    """Serialize a Python object using the legacy pickle artifact format."""
     with path.open("wb") as fh:
         pickle.dump(obj, fh)
 
 
 def write_log(path, messages):
+    """Write newline-delimited failure messages when any exist."""
     if messages:
         path.write_text("\n".join(messages) + "\n", encoding="utf-8")
 
 
 def main(argv=None):
+    """Run the end-to-end extraction workflow and emit legacy artifact files."""
     args = build_parser().parse_args(argv)
     input_data_dir = Path(args.input_data_dir).resolve()
     dataset_eval_path = Path(args.dataset_eval).resolve()

@@ -14,6 +14,7 @@ from coachopt.utils import save_name_array, write_json
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for pass-2 grid-constraint selection."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--diff-matrix", required=True, help="Path to diff_99590.npy")
     parser.add_argument("--diff-names", required=True, help="Path to name_list_diff_99590.npy")
@@ -30,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Select, save, and summarize the reduced diff-constraint matrix."""
     parser = build_parser()
     args = parser.parse_args(argv)
 

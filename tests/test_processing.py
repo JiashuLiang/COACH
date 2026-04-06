@@ -1,3 +1,5 @@
+"""Regression tests for preprocessing artifact generation."""
+
 import csv
 import pickle
 import sys
@@ -14,6 +16,7 @@ from coachopt.utils import read_csv_frame
 
 
 def synthetic_reaction(offset: float) -> dict:
+    """Create a compact synthetic reaction entry with legacy-shaped matrices."""
     fitting = np.zeros((180, 96), dtype=float)
     fitting[64] = offset + np.arange(96) * 0.01
     fitting[153] = offset * 2.0 + np.arange(96) * 0.02
@@ -34,7 +37,10 @@ def synthetic_reaction(offset: float) -> dict:
 
 
 class ProcessingTests(unittest.TestCase):
+    """Verify preprocessing outputs match the legacy artifact contract."""
+
     def test_build_and_save_data_preserves_legacy_outputs(self):
+        """Write artifacts and confirm the expected filenames and array shapes."""
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             reaction_path = root / "reaction_data.dict"
@@ -85,6 +91,7 @@ class ProcessingTests(unittest.TestCase):
 
             self.assertEqual(a_matrix.shape, (3, 289))
             self.assertEqual(b_vec.shape, (3,))
+            # "Shrink" with a single datapoint still evaluates to weight 1.0.
             self.assertEqual(weight_vec.tolist(), [2.0, 2.0, 1.0])
             self.assertEqual(diff_matrix.shape, (3, 289))
             self.assertTrue(np.allclose(diff_matrix[:, -1], 0.0))

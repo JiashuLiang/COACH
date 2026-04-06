@@ -10,6 +10,7 @@ from coachopt.utils import read_csv_frame
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for post-run analysis."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", required=True, help="Optimization directory containing betas_nonzero*.npy")
     parser.add_argument("--processed-dir", required=True, help="Directory with A_matrix.npy and related artifacts")
@@ -21,6 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Load optional metadata, analyze a run directory, and print artifact locations."""
     parser = build_parser()
     args = parser.parse_args(argv)
 

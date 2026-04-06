@@ -13,15 +13,19 @@ from .utils import ensure_directory, load_pickle, write_csv_rows, write_json
 
 
 def rms(values: np.ndarray) -> float:
+    """Compute an unweighted root-mean-square value."""
     return float(np.sqrt(np.mean(np.square(values))))
 
 
 def wrms(values: np.ndarray, weights: np.ndarray) -> float:
+    """Compute a weighted root-mean-square value with per-row scaling."""
     return float(np.sqrt(np.mean(np.square(values) * weights)))
 
 
 @dataclass(frozen=True)
 class BetaCandidate:
+    """One beta vector loaded from a ``betas_nonzero*.npy`` artifact."""
+
     label: str
     nonzeros: int
     candidate_index: int
@@ -30,6 +34,7 @@ class BetaCandidate:
 
 
 def load_beta_candidates(run_dir: str | Path) -> list[BetaCandidate]:
+    """Load all beta candidates saved by the optimization sweep."""
     candidates: list[BetaCandidate] = []
     for path in sorted(Path(run_dir).glob("betas_nonzero*.npy")):
         suffix = path.stem.split("betas_nonzero", 1)[1]
@@ -53,6 +58,7 @@ def load_beta_candidates(run_dir: str | Path) -> list[BetaCandidate]:
 
 
 def _grid_stats(diff_matrix: np.ndarray | None, coeff: np.ndarray, threshold: float) -> dict[str, float]:
+    """Summarize grid-difference magnitudes for one coefficient vector."""
     if diff_matrix is None:
         return {}
     values = np.abs(diff_matrix @ coeff) * HARTREE_TO_KCAL_MOL
@@ -70,6 +76,7 @@ def _dataset_rmse_map(
     a_matrix_dict: dict[str, np.ndarray],
     b_vec_dict: dict[str, np.ndarray],
 ) -> dict[str, float]:
+    """Compute per-dataset RMSE values for one beta candidate."""
     return {
         dataset: rms(np.asarray(b_vec_dict[dataset]) - np.asarray(a_matrix_dict[dataset]) @ coeff) * HARTREE_TO_KCAL_MOL
         for dataset in sorted(a_matrix_dict)
@@ -84,6 +91,7 @@ def analyze_run_directory(
     diff_name: str = "diff_99590.npy",
     grid_threshold: float = DEFAULT_GRID_THRESHOLD,
 ) -> dict[str, str]:
+    """Analyze a run directory and materialize summary CSVs plus best-model artifacts."""
     run_dir = Path(run_dir)
     processed_dir = Path(processed_dir)
     analysis_dir = ensure_directory(run_dir / "analysis")

@@ -1,3 +1,5 @@
+"""Regression tests for optimization-result analysis artifacts."""
+
 import csv
 import pickle
 import sys
@@ -13,7 +15,10 @@ from coachopt.analysis import analyze_run_directory
 
 
 class AnalysisTests(unittest.TestCase):
+    """Validate summary-table generation and best-model selection."""
+
     def test_analysis_writes_summary_and_best_models(self):
+        """Prefer the lower-error candidate and emit all expected reports."""
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             processed = root / "processed"

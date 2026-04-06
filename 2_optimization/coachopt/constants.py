@@ -9,6 +9,7 @@ DEFAULT_GRID_THRESHOLD = 0.015
 DEFAULT_TOP_DIFF_PER_BETA = 100
 DEFAULT_TOP_L1_ROWS = 200
 DEFAULT_MAX_COEFFICIENT = 25.0
+# CSV schemas maintained by the cleaned preprocessing pipeline.
 REQUIRED_DATASET_EVAL_COLUMNS = ["Reaction", "Dataset", "Reference", "Stoichiometry"]
 REQUIRED_TRAINING_WEIGHT_COLUMNS = ["Dataset", "datapoints", "weights"]
 

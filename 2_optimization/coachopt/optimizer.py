@@ -21,6 +21,7 @@ from .utils import ensure_directory, write_json
 
 
 def _vector_from_pairs(pairs: list[tuple[int, float]], size: int = 289) -> np.ndarray:
+    """Expand sparse ``(index, value)`` pairs into a dense coefficient vector."""
     vector = np.zeros(size, dtype=float)
     for index, value in pairs:
         vector[index] = value
@@ -35,6 +36,7 @@ DEFAULT_WARM_STARTS = {
 
 
 def _import_gurobi():
+    """Import Gurobi lazily so non-solver utilities remain usable without it."""
     try:
         import gurobipy as gp
         from gurobipy import GRB
@@ -46,6 +48,7 @@ def _import_gurobi():
 
 
 def linear_expansion(values: np.ndarray, order: int) -> np.ndarray:
+    """Build linear-polynomial features ``[1, x, x^2, ...]`` for each input value."""
     output = np.ones((order, values.shape[0]), dtype=float)
     for index in range(1, order):
         output[index] = output[index - 1] * values
@@ -53,6 +56,7 @@ def linear_expansion(values: np.ndarray, order: int) -> np.ndarray:
 
 
 def chebyshev_expansion(values: np.ndarray, order: int) -> np.ndarray:
+    """Build Chebyshev polynomial features for each input value."""
     output = np.ones((order, values.shape[0]), dtype=float)
     output[1] = values
     for index in range(2, order):
@@ -61,6 +65,7 @@ def chebyshev_expansion(values: np.ndarray, order: int) -> np.ndarray:
 
 
 def legendre_expansion(values: np.ndarray, order: int) -> np.ndarray:
+    """Build Legendre polynomial features for each input value."""
     output = np.ones((order, values.shape[0]), dtype=float)
     output[1] = values
     for index in range(2, order):
@@ -72,10 +77,12 @@ def legendre_expansion(values: np.ndarray, order: int) -> np.ndarray:
 
 
 def u_to_s2(values: np.ndarray) -> np.ndarray:
+    """Map bounded exchange variable ``u`` back to the reduced gradient ``s^2``."""
     return 250.0 * values / (1.0 - values)
 
 
 def expansion_assist(us: np.ndarray, ws: np.ndarray, choice: int) -> tuple[np.ndarray, np.ndarray]:
+    """Select the requested polynomial families for the exchange/correlation basis."""
     if choice < 3:
         us_expanded = linear_expansion(us, 8)
     elif choice < 6:
@@ -94,6 +101,7 @@ def expansion_assist(us: np.ndarray, ws: np.ndarray, choice: int) -> tuple[np.nd
 
 
 def expansion(us: np.ndarray, ws: np.ndarray, choice: int, with_nonuniform_scaling: bool = False) -> np.ndarray:
+    """Enumerate the 96-term tensor-product basis over all ``u``/``w`` pairs."""
     us_expanded, ws_expanded = expansion_assist(us, ws, choice)
     expansions = []
     for i in range(us.shape[0]):
@@ -107,6 +115,7 @@ def expansion(us: np.ndarray, ws: np.ndarray, choice: int, with_nonuniform_scali
 
 
 def build_physical_constraints(a_rows: tuple[int, int, int]) -> dict[str, np.ndarray]:
+    """Construct the manuscript-style physical constraint matrices for one row triple."""
     exchange_choice = a_rows[0] % 18
     same_spin_choice = a_rows[1] % 18
     opposite_spin_choice = a_rows[2] % 18
@@ -188,6 +197,8 @@ def build_physical_constraints(a_rows: tuple[int, int, int]) -> dict[str, np.nda
 
 @dataclass
 class OptimizationConfig:
+    """Configuration for one optimization sweep over one or more sparsity levels."""
+
     nonzeros: list[int]
     a_rows: tuple[int, int, int] = DEFAULT_A_ROWS
     repeats: int = 3
@@ -209,10 +220,12 @@ class OptimizationConfig:
 
 
 def _load_array(input_dir: str | Path, filename: str) -> np.ndarray:
+    """Load a NumPy array from the configured input directory."""
     return np.load(Path(input_dir) / filename, allow_pickle=False)
 
 
 def _load_warm_start_vectors(config: OptimizationConfig) -> list[np.ndarray]:
+    """Load and deduplicate optional warm-start beta vectors."""
     vectors: list[np.ndarray] = []
     if config.include_reference_warm_starts:
         vectors.extend(DEFAULT_WARM_STARTS.values())
@@ -245,6 +258,7 @@ def _load_warm_start_vectors(config: OptimizationConfig) -> list[np.ndarray]:
 
 
 def weighted_rmse(a_matrix: np.ndarray, b_vec: np.ndarray, weights: np.ndarray, coeff: np.ndarray) -> float:
+    """Compute the training weighted RMSE in kcal/mol for one coefficient vector."""
     residual = b_vec - a_matrix @ coeff
     return float(np.sqrt(np.mean(np.square(residual) * weights)) * HARTREE_TO_KCAL_MOL)
 
@@ -258,6 +272,7 @@ def _solve_single_mio(
     diff_matrix: np.ndarray | None,
     warm_start: np.ndarray | None,
 ) -> np.ndarray:
+    """Solve one mixed-integer quadratic program for a fixed sparsity level."""
     gp, GRB = _import_gurobi()
     dim = x_matrix.shape[1]
     quad = x_matrix.T @ x_matrix
@@ -277,6 +292,7 @@ def _solve_single_mio(
             beta.Start = warm_start
             include.Start = (np.abs(warm_start) > 1e-8).astype(float)
 
+        # Link binary support indicators to continuous coefficients via big-M bounds.
         model.addConstr(beta <= config.coefficient_bound * include, name="beta_upper_bound")
         model.addConstr(beta >= -config.coefficient_bound * include, name="beta_lower_bound")
         model.addConstr(include.sum() <= nonzeros, name="sparsity_limit")
@@ -289,6 +305,9 @@ def _solve_single_mio(
         objective += 0.5 * float(y_vec @ y_vec)
         model.setObjective(objective, GRB.MINIMIZE)
 
+        # The first 96 coefficients are exchange, the next 96 same-spin
+        # correlation, the next 96 opposite-spin correlation, and the final
+        # scalar is the SR-exchange mixing parameter.
         ex_rel = constraints["exchange00_relation"]
         model.addConstr(ex_rel @ beta[:96] + beta[288] == 1.0, name="ueg_exchange")
 
@@ -318,6 +337,7 @@ def _solve_single_mio(
 
 
 def run_optimization_sweep(config: OptimizationConfig) -> dict[str, str]:
+    """Run the MIO solver for every requested sparsity level and save all candidates."""
     output_dir = ensure_directory(config.out_dir)
     a_matrix = _load_array(config.input_dir, config.a_matrix_name)
     b_vec = _load_array(config.input_dir, config.b_vec_name)

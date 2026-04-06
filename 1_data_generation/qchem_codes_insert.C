@@ -45,7 +45,7 @@ void Legendre(arma::vec &vec, double x) {
     }
 }
 
-// generate various expansion using the above functions and the variable u, w, beta_f
+// Generate the 96 x 18 tensor-product basis used by exchange/correlation terms.
 void Expansion(arma::mat &basis_sub, double u, double w, double beta_f){
 
     // To store the expansion of u
@@ -117,16 +117,13 @@ void eval_exchange_channel(const size_t ngrid, const arma::vec &weights,
     double kF_coeffecient = std::pow(6.0*Pi*Pi,1.0/3.0);
 
 
-//  double caa = 0.85;
-//  double cab = 0.259;
-//  double cac = 1.007;
-    
     for(size_t i = 0; i < ngrid; i++) {
         double RA = std::max(Rho[i],double(0.0));
         double GA = std::pow(Rho1(i,0),2)+std::pow(Rho1(i,1),2)+std::pow(Rho1(i,2),2);
         double TA = std::max(Tau[i],double(0.0));
         if((RA > Tol) && (TA > Tol)) {
-        
+            // Defensive clipping mirrors the historical implementation when
+            // small numerical noise produces slightly negative densities.
             double Rho4o3 = std::pow(RA,4.0/3.0);
             double Rho1o3 = std::pow(RA,1.0/3.0);
             double exUEG = cLDA*Rho4o3;
@@ -166,7 +163,7 @@ inline double G_func(double rs, double A, double alpha_1, double beta_1, double 
             std::log(1.0 + 1.0/(2.0*A*( (beta_1 + beta_3 * rs) * std::sqrt(rs) + (beta_2 + beta_4 * rs)* rs)));
 }
 
-// Evaluate the SCAN correlation energy correction to LDA when beta_f = 0
+// Evaluate the SCAN correlation energy correction to LDA when beta_f = 0.
 double H_func(double rs, double s2, double zeta, double e_LDA){
     double phi = (std::pow(1.0-zeta,2.0/3.0) +std::pow(1.0+zeta,2.0/3.0))/2.0;
     double gamma = (1.0-std::log(2.0))/(M_PI*M_PI);
@@ -284,7 +281,8 @@ void eval_correlation_channels(const size_t ngrid, const arma::vec &weights,
             corr_ss_SCAN.cols(nseries,2*nseries-1) += (2.0 * beta * we_c_SCAN_b) * basis_tmp;
         }
 
-        // os
+        // Opposite-spin branch reuses same-spin intermediates to isolate the
+        // mixed-spin PW92/SCAN contribution from the total correlation energy.
         if((RA > Tol) && (RB > Tol) && (TA > Tol) && (TB > Tol)) {
             double R = RA + RB;
             double G = std::pow(RhoA1(i,0)+RhoB1(i,0),2)

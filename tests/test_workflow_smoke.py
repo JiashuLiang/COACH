@@ -1,3 +1,5 @@
+"""Smoke tests for the preprocessing plus analysis workflow without Gurobi."""
+
 import csv
 import pickle
 import sys
@@ -16,6 +18,7 @@ from coachopt.utils import read_csv_frame, save_name_array, write_json
 
 
 def synthetic_reaction(offset: float) -> dict:
+    """Create a minimal reaction payload for workflow-level integration tests."""
     fitting = np.zeros((180, 96), dtype=float)
     fitting[64] = offset + np.arange(96) * 0.01
     fitting[153] = offset + np.arange(96) * 0.02
@@ -36,7 +39,10 @@ def synthetic_reaction(offset: float) -> dict:
 
 
 class WorkflowSmokeTests(unittest.TestCase):
+    """Exercise the cleaned workflow around stored beta vectors and analysis."""
+
     def test_smoke_path_without_solver(self):
+        """Run the pass-1/pass-2 artifact flow without invoking the optimizer."""
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             reaction_data = {"R1": synthetic_reaction(0.0), "R2": synthetic_reaction(1.0)}

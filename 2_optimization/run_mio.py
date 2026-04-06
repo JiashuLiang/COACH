@@ -11,6 +11,7 @@ from coachopt.optimizer import OptimizationConfig, run_optimization_sweep
 
 
 def _load_config_file(path: str | None) -> dict:
+    """Load optional JSON or YAML defaults for the optimization CLI."""
     if not path:
         return {}
     suffix = Path(path).suffix.lower()
@@ -28,6 +29,7 @@ def _load_config_file(path: str | None) -> dict:
 
 
 def _preparse_config(argv: list[str] | None) -> str | None:
+    """Read only ``--config_file`` so parser defaults can come from disk."""
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config_file")
     namespace, _ = parser.parse_known_args(argv)
@@ -35,6 +37,7 @@ def _preparse_config(argv: list[str] | None) -> str | None:
 
 
 def build_parser(defaults: dict | None = None) -> argparse.ArgumentParser:
+    """Build the MIO CLI parser with optional config-file defaults."""
     defaults = defaults or {}
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config_file", help="Optional JSON/YAML config file")
@@ -67,6 +70,7 @@ def build_parser(defaults: dict | None = None) -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse CLI options, normalize legacy flags, and launch the optimization sweep."""
     config_file = _preparse_config(argv)
     config_defaults = _load_config_file(config_file)
     parser = build_parser(config_defaults)

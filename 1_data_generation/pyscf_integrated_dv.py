@@ -1,3 +1,5 @@
+"""Generate integratedDV matrices from PySCF using the cleaned COACH baseline layout."""
+
 import math
 from pathlib import Path
 
@@ -703,13 +705,12 @@ def main():
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     mol, dm_a, dm_b, mf = build_mol_and_dm()
-    
+
     energy_breakdown = compute_pyscf_energy_breakdown(mf, dm_a, dm_b)
     ref = REFERENCE_ENERGY_BREAKDOWN
     energy_breakdown_text = format_energy_breakdown(energy_breakdown, ref)
 
     print(energy_breakdown_text, end="")
-
 
     ni = dft.numint.NumInt()
 

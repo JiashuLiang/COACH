@@ -9,6 +9,8 @@ import numpy as np
 
 @dataclass(frozen=True)
 class ConstraintSelection:
+    """Selected diff-constraint rows together with reproducibility metadata."""
+
     indices: np.ndarray
     rows: np.ndarray
     names: list[str]
@@ -16,6 +18,7 @@ class ConstraintSelection:
 
 
 def _top_abs_indices(values: np.ndarray, count: int) -> np.ndarray:
+    """Return indices of the ``count`` largest absolute entries."""
     if values.size == 0:
         return np.asarray([], dtype=int)
     count = min(count, values.size)
@@ -31,6 +34,7 @@ def select_diff_constraint_rows(
     top_per_beta: int = 100,
     top_l1: int = 200,
 ) -> ConstraintSelection:
+    """Choose informative diff rows from candidate beta vectors plus an L1 fallback."""
     if diff_matrix.ndim != 2:
         raise ValueError("diff_matrix must be a 2D array")
     if diff_matrix.shape[0] != len(diff_names):
