@@ -64,13 +64,7 @@ def build_parser(defaults: dict | None = None) -> argparse.ArgumentParser:
     parser.add_argument("--diff_name", type=str, default=defaults.get("diff_name", "diff_constraint_99590.npy"))
     parser.add_argument("--grid_thresh", type=float, default=defaults.get("grid_thresh", 0.015))
     parser.add_argument("--random_seed", type=int, default=defaults.get("random_seed", 0))
-    parser.add_argument("--warm_start_dir", type=str, default=defaults.get("warm_start_dir"))
-    parser.add_argument("--warm_start_file", action="append", default=defaults.get("warm_start_file", []))
-    parser.add_argument(
-        "--no_reference_warm_starts",
-        action="store_true",
-        default=defaults.get("no_reference_warm_starts", False),
-    )
+    parser.add_argument("--warm_start_files", nargs="+", default=defaults.get("warm_start_files", []))
     return parser
 
 
@@ -102,9 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         b_vec_name=args.bvec_name,
         weight_name=args.weight_name,
         diff_name=diff_name,
-        warm_start_dir=args.warm_start_dir,
-        warm_start_files=args.warm_start_file,
-        include_reference_warm_starts=not args.no_reference_warm_starts,
+        warm_start_files=args.warm_start_files,
     )
     outputs = run_optimization_sweep(config)
     print(f"Wrote optimization outputs to {outputs['output_dir']}")

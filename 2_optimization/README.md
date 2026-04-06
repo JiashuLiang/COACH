@@ -43,7 +43,10 @@ This directory contains the maintained script-first COACH optimization workflow.
      --diff_name diff_constraint_99590.npy \
      --input_dir processed_data \
      --out_dir runs/pass2 \
-     --warm_start_dir runs/pass1 \
+     --warm_start_files \
+       runs/pass1/betas_nonzero24.npy \
+       runs/pass1/betas_nonzero32.npy \
+       runs/pass1/betas_nonzero40.npy \
      --A_rows 64 153 166
    ```
 
@@ -113,4 +116,4 @@ The examples above show the minimal baseline commands. [`run_mio.py`](run_mio.py
 - `--A_rows`: override the three fitting rows used to define the 289-parameter baseline.
 - `--bvec_name`, `--Amatrix_name`, `--weight_name`, `--diff_name`: override input artifact filenames inside `--input_dir`.
 - `--with_diff`, `--grid_thresh`: enable diff-matrix constraints and set the threshold in kcal/mol.
-- `--warm_start_dir`, `--warm_start_file`, `--no_reference_warm_starts`: control warm-start sources.
+- `--warm_start_files`: load one or more extra warm-start `.npy` files after the built-in `simple` seed. In config files, this value can be a single string or a list.

@@ -14,8 +14,6 @@ from .constants import (
     DEFAULT_GRID_THRESHOLD,
     DEFAULT_MAX_COEFFICIENT,
     HARTREE_TO_KCAL_MOL,
-    W_B97M_V_COEF_289,
-    W_B97X_V_COEF_289,
 )
 from .physical_constraints import build_physical_constraints
 from .utils import ensure_directory, write_json
@@ -29,11 +27,16 @@ def _vector_from_pairs(pairs: list[tuple[int, float]], size: int = 289) -> np.nd
     return vector
 
 
-DEFAULT_WARM_STARTS = {
-    "simple": _vector_from_pairs([(0, 0.85), (1, 1.0), (96, 1.0), (192, 1.0), (288, 0.15)]),
-    "wB97X-V": _vector_from_pairs(W_B97X_V_COEF_289),
-    "wB97M-V": _vector_from_pairs(W_B97M_V_COEF_289),
-}
+SIMPLE_WARM_START = _vector_from_pairs([(0, 0.85), (1, 1.0), (96, 1.0), (192, 1.0), (288, 0.15)])
+
+
+def _normalize_warm_start_files(value: str | Iterable[str] | None) -> list[str]:
+    """Normalize one or many warm-start file paths into a simple list."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return [str(path) for path in value]
 
 
 def _import_gurobi():
@@ -67,9 +70,11 @@ class OptimizationConfig:
     b_vec_name: str = "b_vec.npy"
     weight_name: str = "weight_vec.npy"
     diff_name: str | None = None
-    warm_start_files: list[str] = field(default_factory=list)
-    warm_start_dir: str | None = None
-    include_reference_warm_starts: bool = True
+    warm_start_files: str | list[str] | None = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        """Store warm-start filenames in a consistent list form."""
+        self.warm_start_files = _normalize_warm_start_files(self.warm_start_files)
 
 
 def _load_array(input_dir: str | Path, filename: str) -> np.ndarray:
@@ -77,37 +82,18 @@ def _load_array(input_dir: str | Path, filename: str) -> np.ndarray:
     return np.load(Path(input_dir) / filename, allow_pickle=False)
 
 
-def _load_warm_start_vectors(config: OptimizationConfig) -> list[np.ndarray]:
-    """Load and deduplicate optional warm-start beta vectors."""
-    vectors: list[np.ndarray] = []
-    if config.include_reference_warm_starts:
-        vectors.extend(DEFAULT_WARM_STARTS.values())
-
-    if config.warm_start_dir:
-        for path in sorted(Path(config.warm_start_dir).glob("betas_nonzero*.npy")):
-            data = np.load(path)
-            if data.ndim == 1:
-                vectors.append(data.astype(float))
-            else:
-                vectors.extend(np.asarray(data, dtype=float))
+def _load_warm_start_vectors(config: OptimizationConfig) -> dict[str, np.ndarray]:
+    """Load named warm-start beta vectors keyed by source."""
+    vectors: dict[str, np.ndarray] = {"simple": np.asarray(SIMPLE_WARM_START, dtype=float).copy()}
 
     for filename in config.warm_start_files:
-        data = np.load(filename)
-        if data.ndim == 1:
-            vectors.append(data.astype(float))
-        else:
-            vectors.extend(np.asarray(data, dtype=float))
+        key = filename.replace("/", "_")
+        data = np.load(filename, allow_pickle=False)
+        array = np.asarray(data, dtype=float)
+        if array.shape == (289,) or (array.ndim == 2 and array.shape[1] == 289):
+            vectors[key] = array
 
-    unique_vectors: list[np.ndarray] = []
-    seen: set[bytes] = set()
-    for vector in vectors:
-        if vector.shape != (289,):
-            continue
-        key = np.asarray(vector, dtype=float).round(12).tobytes()
-        if key not in seen:
-            seen.add(key)
-            unique_vectors.append(np.asarray(vector, dtype=float))
-    return unique_vectors
+    return vectors
 
 
 def weighted_rmse(a_matrix: np.ndarray, b_vec: np.ndarray, weights: np.ndarray, coeff: np.ndarray) -> float:
@@ -216,7 +202,11 @@ def run_optimization_sweep(config: OptimizationConfig) -> dict[str, str]:
         candidates: list[np.ndarray] = []
         seeds: list[np.ndarray | None] = []
         if warm_start_pool:
-            seeds.extend(warm_start_pool)
+            for warm_start in warm_start_pool.values():
+                if warm_start.ndim == 1:
+                    seeds.append(warm_start)
+                else:
+                    seeds.extend(np.asarray(warm_start, dtype=float))
         while len(seeds) < max(config.repeats, 1):
             seeds.append(None)
 
