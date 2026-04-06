@@ -122,47 +122,50 @@ def _solve_single_mio(
             model.Params.OutputFlag = 0
 
         beta = model.addMVar(shape=dim, lb=-config.coefficient_bound, ub=config.coefficient_bound, name="beta")
-        include = model.addMVar(shape=dim, vtype=GRB.BINARY, name="include")
+        iszero = model.addVars(dim, vtype=GRB.BINARY, name="iszero") 
 
         if warm_start is not None and warm_start.shape == (dim,):
             beta.Start = warm_start
-            include.Start = (np.abs(warm_start) > 1e-8).astype(float)
+            for i in range(dim):
+                iszero[i].start = (abs(warm_start[i]) < 1e-6)
 
-        # Link binary support indicators to continuous coefficients via big-M bounds.
-        model.addConstr(beta <= config.coefficient_bound * include, name="beta_upper_bound")
-        model.addConstr(beta >= -config.coefficient_bound * include, name="beta_lower_bound")
-        model.addConstr(include.sum() <= nonzeros, name="sparsity_limit")
 
-        objective = gp.QuadExpr()
-        for i, j in product(range(dim), repeat=2):
-            objective += 0.5 * quad[i, j] * beta[i] * beta[j]
-        for i in range(dim):
-            objective -= lin[i] * beta[i]
-        objective += 0.5 * float(y_vec @ y_vec)
-        model.setObjective(objective, GRB.MINIMIZE)
+        obj = sum(0.5 * quad[i,j] * beta[i] * beta[j]
+                for i, j in product(range(dim), repeat=2))
+        obj -= sum(lin[i] * beta[i] for i in range(dim))
+        obj += 0.5 * float(y_vec @ y_vec)
+        model.setObjective(obj, GRB.MINIMIZE)
+
+        # Constraint sets, we use dim-1 because we apply "exchange00_relation" to eliminate one degree of freedom.
+        for i in range(dim-1):
+            # If iszero[i]=1, then beta[i] = 0
+            model.addSOS(GRB.SOS_TYPE1, [beta[i], iszero[i]])
+        model.addConstr(iszero.sum() == dim - nonzeros)
+
 
         # The first 96 coefficients are exchange, the next 96 same-spin
         # correlation, the next 96 opposite-spin correlation, and the final
         # scalar is the SR-exchange mixing parameter.
         ex_rel = constraints["exchange00_relation"]
-        model.addConstr(ex_rel @ beta[:96] + beta[288] == 1.0, name="ueg_exchange")
+        model.addConstr(ex_rel @ beta[:96] + beta[-1] == 1.0, name="UEG_exchange00_constraint")
+        model.addConstr(beta[-1] <= 1.0, name="exchange00_max_constraint")
+        model.addConstr(beta[-1] >= 0.0, name="exchange00_min_constraint")
 
-        for index, row in enumerate(constraints["exchange_bounds"]):
-            model.addConstr((row - 2.2146 * ex_rel) @ beta[:96] <= 0.0, name=f"gx_max_{index}")
-        for index, row in enumerate(constraints["same_spin_bounds"]):
-            model.addConstr(row @ beta[96:192] <= 10.0, name=f"gcss_max_{index}")
-            model.addConstr(row @ beta[96:192] >= -10.0, name=f"gcss_min_{index}")
-        for index, row in enumerate(constraints["opposite_spin_bounds"]):
-            model.addConstr(row @ beta[192:288] <= 10.0, name=f"gcos_max_{index}")
-            model.addConstr(row @ beta[192:288] >= -10.0, name=f"gcos_min_{index}")
-        for index, row in enumerate(constraints["constraint5"]):
-            model.addConstr((row - 1.479 * ex_rel) @ beta[:96] <= 0.0, name=f"gx_alpha0_{index}")
+        model.addConstr((constraints["exchange_bounds"] - 2.2146  * ex_rel) @ beta[:96] <= 0, name="gx_max_constraint")
+        model.addConstr(constraints["exchange_bounds"] @ beta[:96] >= 0, name="gx_min_constraint")
+        model.addConstr(constraints["same_spin_bounds"] @ beta[96:192] <= 10, name="gcss_max_constraint")
+        model.addConstr(constraints["same_spin_bounds"] @ beta[96:192] >= -10, name="gcss_min_constraint")
+        model.addConstr(constraints["opposite_spin_bounds"] @ beta[192:288] <= 10, name="gcos_max_constraint")
+        model.addConstr(constraints["opposite_spin_bounds"] @ beta[192:288] >= -10, name="gcos_min_constraint")
 
+        model.addConstr((constraints["constraint5"] - 1.479 * ex_rel) @ beta[:96] <= 0.0, name="gx_one_constraint")
+
+
+        # Add diff constraints |diff * beta| <= 0.015 kcal/mol (99590 vs 250974)
         if diff_matrix is not None:
-            threshold = config.grid_threshold / HARTREE_TO_KCAL_MOL
-            for index, row in enumerate(diff_matrix):
-                model.addConstr(row @ beta <= threshold, name=f"grid_diff_max_{index}")
-                model.addConstr(row @ beta >= -threshold, name=f"grid_diff_min_{index}")
+            threshold = config.grid_threshold / HARTREE_TO_KCAL_MOL  * 0.999 # Add a small safety margin to ensure the final model is below the threshold after rounding and unit conversion.
+            model.addConstr(diff_matrix @ beta <= threshold, name='diff_max_constraint')
+            model.addConstr(diff_matrix @ beta >= -threshold, name='diff_min_constraint')
 
         model.optimize()
         if model.Status == GRB.Status.INFEASIBLE:
