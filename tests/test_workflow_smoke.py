@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "2_optimization"))
 from coachopt.analysis import analyze_run_directory
 from coachopt.constraints import select_diff_constraint_rows
 from coachopt.processing import build_and_save_data
-from coachopt.utils import read_csv_rows, save_name_array, write_json
+from coachopt.utils import read_csv_frame, save_name_array, write_json
 
 
 def synthetic_reaction(offset: float) -> dict:
@@ -64,11 +64,11 @@ class WorkflowSmokeTests(unittest.TestCase):
 
             build_and_save_data(
                 reaction_data=reaction_data,
-                dataset_eval_rows=read_csv_rows(
+                dataset_eval=read_csv_frame(
                     dataset_eval_path,
                     ["Reaction", "Dataset", "Reference", "Stoichiometry"],
                 ),
-                training_weight_rows=read_csv_rows(
+                training_weight=read_csv_frame(
                     training_weights_path,
                     ["Dataset", "datapoints", "weights"],
                 ),

@@ -42,11 +42,6 @@ def read_csv_frame(path: str | Path, required_columns: list[str] | None = None) 
     return frame
 
 
-def read_csv_rows(path: str | Path, required_columns: list[str]) -> list[dict]:
-    frame = read_csv_frame(path, required_columns)
-    return frame[required_columns].to_dict(orient="records")
-
-
 def write_csv_rows(path: str | Path, fieldnames: list[str], rows: Iterable[dict]) -> None:
     frame = pd.DataFrame(list(rows), columns=fieldnames)
     frame.to_csv(Path(path), index=False)

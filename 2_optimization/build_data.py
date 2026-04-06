@@ -6,8 +6,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from coachopt.constants import REQUIRED_DATASET_EVAL_COLUMNS, REQUIRED_TRAINING_WEIGHT_COLUMNS, DEFAULT_A_ROWS, DEFAULT_GRID_KEY
 from coachopt.processing import build_and_save_data
-from coachopt.utils import load_pickle, read_csv_rows
+from coachopt.utils import load_pickle, read_csv_frame
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -20,8 +21,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dataset-eval", required=True, help="Path to dataset_eval.csv")
     parser.add_argument("--training-weights", required=True, help="Path to training_weights.csv")
     parser.add_argument("--output-dir", required=True, help="Directory for generated NumPy and pickle artifacts")
-    parser.add_argument("--a-rows", nargs=3, type=int, default=(64, 153, 166), help="Three fitting-row indices")
-    parser.add_argument("--diff-grid", default="99000590", help="Grid key used for diff matrices")
+    parser.add_argument("--a-rows", nargs=3, type=int, default=DEFAULT_A_ROWS, help="Three fitting-row indices for exchange, same-spin correlation, and opposite-spin correlation features")
+    parser.add_argument("--diff-grid", default=DEFAULT_GRID_KEY, help="Grid key used for diff matrices")
     return parser
 
 
@@ -30,18 +31,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     reaction_data = load_pickle(args.reaction_data)
-    dataset_eval_rows = read_csv_rows(
+    dataset_eval = read_csv_frame(
         args.dataset_eval,
-        ["Reaction", "Dataset", "Reference", "Stoichiometry"],
+        REQUIRED_DATASET_EVAL_COLUMNS,
     )
-    training_weight_rows = read_csv_rows(
+    training_weight = read_csv_frame(
         args.training_weights,
-        ["Dataset", "datapoints", "weights"],
+        REQUIRED_TRAINING_WEIGHT_COLUMNS,
     )
     outputs = build_and_save_data(
         reaction_data=reaction_data,
-        dataset_eval_rows=dataset_eval_rows,
-        training_weight_rows=training_weight_rows,
+        dataset_eval=dataset_eval,
+        training_weight=training_weight,
         output_dir=Path(args.output_dir),
         a_rows=tuple(args.a_rows),
         diff_grid=args.diff_grid,

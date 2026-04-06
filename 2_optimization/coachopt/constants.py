@@ -9,6 +9,8 @@ DEFAULT_GRID_THRESHOLD = 0.015
 DEFAULT_TOP_DIFF_PER_BETA = 100
 DEFAULT_TOP_L1_ROWS = 200
 DEFAULT_MAX_COEFFICIENT = 25.0
+REQUIRED_DATASET_EVAL_COLUMNS = ["Reaction", "Dataset", "Reference", "Stoichiometry"]
+REQUIRED_TRAINING_WEIGHT_COLUMNS = ["Dataset", "datapoints", "weights"]
 
 # Baseline 289-parameter reference coefficients used as optional warm starts.
 W_B97M_V_COEF_289 = [

@@ -5,8 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
-from .constants import DEFAULT_A_ROWS, DEFAULT_GRID_KEY
+from .constants import (
+    DEFAULT_A_ROWS,
+    DEFAULT_GRID_KEY,
+)
 from .utils import ensure_directory, save_name_array, save_pickle, write_json
 
 
@@ -49,13 +53,16 @@ def artifact_grid_suffix(grid_key: str) -> str:
 
 def build_and_save_data(
     reaction_data: dict[str, dict],
-    dataset_eval_rows: list[dict],
-    training_weight_rows: list[dict],
+    dataset_eval: pd.DataFrame,
+    training_weight: pd.DataFrame,
     output_dir: str | Path,
     a_rows: tuple[int, ...] = DEFAULT_A_ROWS,
     diff_grid: str = DEFAULT_GRID_KEY,
 ) -> dict[str, str]:
-    by_reaction = {row["Reaction"]: row for row in dataset_eval_rows}
+    by_reaction = {
+        row.Reaction: {"Dataset": row.Dataset}
+        for row in dataset_eval.itertuples(index=False)
+    }
     reactions_by_dataset: dict[str, list[str]] = {}
     a_matrix_dataset_rows: dict[str, list[np.ndarray]] = {}
     b_vec_dataset_rows: dict[str, list[float]] = {}
@@ -66,9 +73,9 @@ def build_and_save_data(
     weight_rows: list[float] = []
     name_list: list[str] = []
 
-    for row in dataset_eval_rows:
-        reaction_id = row["Reaction"]
-        dataset = row["Dataset"]
+    for row in dataset_eval.itertuples(index=False):
+        reaction_id = row.Reaction
+        dataset = row.Dataset
         if reaction_id not in reaction_data:
             raise KeyError(f"Reaction {reaction_id!r} not found in reaction_data")
 
@@ -84,15 +91,15 @@ def build_and_save_data(
             diff_rows.append(np.concatenate([selected, np.asarray([0.0], dtype=float)]))
             diff_names.append(reaction_id)
 
-    for row in training_weight_rows:
-        dataset = row["Dataset"]
+    for row in training_weight.itertuples(index=False):
+        dataset = row.Dataset
         if dataset not in reactions_by_dataset:
             raise KeyError(f"Dataset {dataset!r} was not found in dataset_eval metadata")
 
-        if row["datapoints"] == "All":
+        if row.datapoints == "All":
             reaction_ids = reactions_by_dataset[dataset]
         else:
-            reaction_ids = [item.strip() for item in row["datapoints"].split(",") if item.strip()]
+            reaction_ids = [item.strip() for item in row.datapoints.split(",") if item.strip()]
             if not reaction_ids:
                 raise ValueError(f"Dataset {dataset!r} has an empty datapoints field")
             for reaction_id in reaction_ids:
@@ -104,7 +111,7 @@ def build_and_save_data(
                         f"{by_reaction[reaction_id]['Dataset']!r}, not {dataset!r}"
                     )
 
-        weights = _weights_for_dataset(row["weights"], len(reaction_ids))
+        weights = _weights_for_dataset(row.weights, len(reaction_ids))
         for reaction_id in reaction_ids:
             features, target = _feature_vector(reaction_data[reaction_id], a_rows)
             a_matrix_rows.append(features)

@@ -10,7 +10,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "2_optimization"))
 
 from coachopt.processing import build_and_save_data
-from coachopt.utils import read_csv_rows
+from coachopt.utils import read_csv_frame
 
 
 def synthetic_reaction(offset: float) -> dict:
@@ -67,11 +67,11 @@ class ProcessingTests(unittest.TestCase):
 
             outputs = build_and_save_data(
                 reaction_data=reaction_data,
-                dataset_eval_rows=read_csv_rows(
+                dataset_eval=read_csv_frame(
                     dataset_eval_path,
                     ["Reaction", "Dataset", "Reference", "Stoichiometry"],
                 ),
-                training_weight_rows=read_csv_rows(
+                training_weight=read_csv_frame(
                     weights_path,
                     ["Dataset", "datapoints", "weights"],
                 ),
