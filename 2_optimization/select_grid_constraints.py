@@ -10,14 +10,14 @@ import numpy as np
 
 from coachopt.analysis import load_beta_candidates
 from coachopt.constraints import select_diff_constraint_rows
-from coachopt.utils import save_name_array, write_json
+from coachopt.utils import load_names, save_names, write_json
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI parser for pass-2 grid-constraint selection."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--diff-matrix", required=True, help="Path to diff_99590.npy")
-    parser.add_argument("--diff-names", required=True, help="Path to name_list_diff_99590.npy")
+    parser.add_argument("--diff-names", required=True, help="Path to name_list_diff_99590.txt")
     parser.add_argument("--run-dir", required=True, help="Pass-1 optimization directory with betas_nonzero*.npy files")
     parser.add_argument("--output-dir", required=True, help="Directory to write selected constraint artifacts")
     parser.add_argument("--top-per-beta", type=int, default=100, help="Rows selected per beta by |diff @ beta|")
@@ -25,7 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-prefix",
         default="diff_constraint_99590",
-        help="Output basename prefix. The script writes PREFIX.npy and name_list_PREFIX.npy.",
+        help="Output basename prefix. The script writes PREFIX.npy and name_list_PREFIX.txt.",
     )
     return parser
 
@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     diff_matrix = np.load(args.diff_matrix)
-    diff_names = np.load(args.diff_names).astype(str).tolist()
+    diff_names = load_names(args.diff_names)
     betas = [candidate.coefficients for candidate in load_beta_candidates(args.run_dir)]
     selection = select_diff_constraint_rows(
         diff_matrix=diff_matrix,
@@ -49,9 +49,9 @@ def main(argv: list[str] | None = None) -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     diff_path = output_dir / f"{args.output_prefix}.npy"
-    names_path = output_dir / f"name_list_{args.output_prefix}.npy"
+    names_path = output_dir / f"name_list_{args.output_prefix}.txt"
     np.save(diff_path, selection.rows)
-    save_name_array(names_path, selection.names)
+    save_names(names_path, selection.names)
     write_json(
         output_dir / f"{args.output_prefix}.json",
         {

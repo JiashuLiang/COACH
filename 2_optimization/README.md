@@ -29,7 +29,7 @@ This directory contains the maintained script-first COACH optimization workflow.
    ```bash
    python3 2_optimization/select_grid_constraints.py \
      --diff-matrix processed_data/diff_99590.npy \
-     --diff-names processed_data/name_list_diff_99590.npy \
+     --diff-names processed_data/name_list_diff_99590.txt \
      --run-dir runs/pass1 \
      --output-dir processed_data
    ```
@@ -76,16 +76,16 @@ Preprocessing writes:
 - `A_matrix.npy`
 - `b_vec.npy`
 - `weight_vec.npy`
-- `name_list.npy`
+- `name_list.txt`
 - `A_matrix_dataset.pkl`
 - `b_vec_dataset.pkl`
 - `diff_99590.npy`
-- `name_list_diff_99590.npy`
+- `name_list_diff_99590.txt`
 
 Constraint selection writes:
 
 - `diff_constraint_99590.npy`
-- `name_list_diff_constraint_99590.npy`
+- `name_list_diff_constraint_99590.txt`
 - `diff_constraint_99590.json`
 
 Optimization writes one `betas_nonzero<N>.npy` file per sparsity plus `run_config.json`.

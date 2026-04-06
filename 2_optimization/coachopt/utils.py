@@ -53,9 +53,17 @@ def write_csv_rows(path: str | Path, fieldnames: list[str], rows: Iterable[dict]
     frame.to_csv(Path(path), index=False)
 
 
-def save_name_array(path: str | Path, values: list[str]) -> None:
-    """Persist a list of names in NumPy's ``.npy`` format."""
-    np.save(Path(path), np.asarray(values, dtype=str))
+def save_names(path: str | Path, values: list[str]) -> None:
+    """Persist a list of names as one UTF-8 line per entry."""
+    text = "\n".join(values)
+    if values:
+        text += "\n"
+    Path(path).write_text(text, encoding="utf-8")
+
+
+def load_names(path: str | Path) -> list[str]:
+    """Load a UTF-8 newline-delimited list of names."""
+    return Path(path).read_text(encoding="utf-8").splitlines()
 
 
 def format_float(value: float) -> float:

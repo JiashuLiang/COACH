@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "2_optimization"))
 from coachopt.analysis import analyze_run_directory
 from coachopt.constraints import select_diff_constraint_rows
 from coachopt.processing import build_and_save_data
-from coachopt.utils import read_csv_frame, save_name_array, write_json
+from coachopt.utils import load_names, read_csv_frame, save_names, write_json
 
 
 def synthetic_reaction(offset: float) -> dict:
@@ -88,10 +88,10 @@ class WorkflowSmokeTests(unittest.TestCase):
             write_json(pass2_dir / "run_config.json", {"nonzeros": [1], "diff_name": "diff_constraint_99590.npy"})
 
             diff_matrix = np.load(processed_dir / "diff_99590.npy")
-            diff_names = np.load(processed_dir / "name_list_diff_99590.npy").astype(str).tolist()
+            diff_names = load_names(processed_dir / "name_list_diff_99590.txt")
             selection = select_diff_constraint_rows(diff_matrix, diff_names, [beta], top_per_beta=1, top_l1=1)
             np.save(processed_dir / "diff_constraint_99590.npy", selection.rows)
-            save_name_array(processed_dir / "name_list_diff_constraint_99590.npy", selection.names)
+            save_names(processed_dir / "name_list_diff_constraint_99590.txt", selection.names)
 
             with (processed_dir / "A_matrix_dataset.pkl").open("rb") as handle:
                 a_dict = pickle.load(handle)
@@ -108,7 +108,7 @@ class WorkflowSmokeTests(unittest.TestCase):
             )
 
             self.assertTrue((processed_dir / "diff_constraint_99590.npy").exists())
-            self.assertTrue((processed_dir / "name_list_diff_constraint_99590.npy").exists())
+            self.assertTrue((processed_dir / "name_list_diff_constraint_99590.txt").exists())
             self.assertTrue((pass2_dir / "run_config.json").exists())
             self.assertTrue(Path(outputs["summary_csv"]).exists())
 
