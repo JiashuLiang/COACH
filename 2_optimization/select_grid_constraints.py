@@ -62,9 +62,8 @@ def main(argv: list[str] | None = None) -> int:
     betas = [candidate.coefficients for candidate in candidates]
     if args.show_largesterror:
         print_largest_diff_names(diff_matrix, diff_names, candidates)
-    selection = select_diff_constraint_rows(
+    selected_rows = select_diff_constraint_rows(
         diff_matrix=diff_matrix,
-        diff_names=diff_names,
         betas=betas,
         top_per_beta=args.top_per_beta,
         top_l1=args.top_l1,
@@ -73,9 +72,9 @@ def main(argv: list[str] | None = None) -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     diff_path = output_dir / f"{args.output_prefix}.npy"
-    np.save(diff_path, selection.rows)
+    np.save(diff_path, selected_rows)
 
-    print(f"Selected {selection.metadata['selected_count']} constraint rows")
+    print(f"Selected {selected_rows.shape[0]} constraint rows")
     print(diff_path)
     return 0
 

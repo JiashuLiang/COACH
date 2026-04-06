@@ -26,14 +26,11 @@ class ConstraintSelectionTests(unittest.TestCase):
             ],
             dtype=float,
         )
-        diff_names = [f"R{i}" for i in range(diff_matrix.shape[0])]
         betas = [np.asarray([1.0, 0.0, 0.0]), np.asarray([0.0, 1.0, 0.0])]
 
-        selection = select_diff_constraint_rows(diff_matrix, diff_names, betas, top_per_beta=1, top_l1=1)
+        selection = select_diff_constraint_rows(diff_matrix, betas, top_per_beta=1, top_l1=1)
 
-        self.assertEqual(selection.indices.tolist(), [1, 2, 4])
-        self.assertEqual(selection.names, ["R1", "R2", "R4"])
-        self.assertEqual(selection.rows.shape, (3, 3))
+        np.testing.assert_array_equal(selection, diff_matrix[[1, 2, 4]])
 
 
 if __name__ == "__main__":

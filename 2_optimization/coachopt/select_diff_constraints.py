@@ -2,19 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import numpy as np
-
-
-@dataclass(frozen=True)
-class ConstraintSelection:
-    """Selected diff-constraint rows together with reproducibility metadata."""
-
-    indices: np.ndarray
-    rows: np.ndarray
-    names: list[str]
-    metadata: dict[str, int]
 
 
 def _largest_abs_indices(values: np.ndarray, count: int) -> np.ndarray:
@@ -40,16 +28,13 @@ def print_largest_diff_names(
 
 def select_diff_constraint_rows(
     diff_matrix: np.ndarray,
-    diff_names: list[str],
     betas: list[np.ndarray],
     top_per_beta: int = 100,
     top_l1: int = 200,
-) -> ConstraintSelection:
+) -> np.ndarray:
     """Choose informative diff rows from candidate beta vectors plus an L1 fallback."""
     if diff_matrix.ndim != 2:
         raise ValueError("diff_matrix must be a 2D array")
-    if diff_matrix.shape[0] != len(diff_names):
-        raise ValueError("diff_matrix row count does not match diff_names")
     if not betas:
         raise ValueError("At least one beta vector is required to select constraint rows")
 
@@ -68,14 +53,4 @@ def select_diff_constraint_rows(
         chosen_indices.update(remaining_indices[_largest_abs_indices(l1_norms, top_l1)].tolist())
 
     ordered_indices = np.asarray(sorted(chosen_indices), dtype=int)
-    return ConstraintSelection(
-        indices=ordered_indices,
-        rows=diff_matrix[ordered_indices],
-        names=[diff_names[index] for index in ordered_indices],
-        metadata={
-            "candidate_count": len(betas),
-            "selected_count": int(ordered_indices.size),
-            "top_per_beta": top_per_beta,
-            "top_l1": top_l1,
-        },
-    )
+    return diff_matrix[ordered_indices]

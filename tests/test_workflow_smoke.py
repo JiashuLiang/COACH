@@ -15,7 +15,7 @@ from coachopt.analysis import analyze_run_directory
 from coachopt.constants import DEFAULT_A_ROWS, DEFAULT_DIFF_MATRIX_NAME, DEFAULT_DIFF_NAMES_NAME, DEFAULT_GRID_KEY, DEFAULT_SELECTED_DIFF_NAME
 from coachopt.select_diff_constraints import select_diff_constraint_rows
 from coachopt.processing import build_and_save_data
-from coachopt.utils import load_names, read_csv_frame, write_json
+from coachopt.utils import read_csv_frame, write_json
 
 
 def synthetic_reaction(offset: float) -> dict:
@@ -89,9 +89,8 @@ class WorkflowSmokeTests(unittest.TestCase):
             write_json(pass2_dir / "run_config.json", {"nonzeros": [1], "diff_name": DEFAULT_SELECTED_DIFF_NAME})
 
             diff_matrix = np.load(processed_dir / DEFAULT_DIFF_MATRIX_NAME)
-            diff_names = load_names(processed_dir / DEFAULT_DIFF_NAMES_NAME)
-            selection = select_diff_constraint_rows(diff_matrix, diff_names, [beta], top_per_beta=1, top_l1=1)
-            np.save(processed_dir / DEFAULT_SELECTED_DIFF_NAME, selection.rows)
+            selection = select_diff_constraint_rows(diff_matrix, [beta], top_per_beta=1, top_l1=1)
+            np.save(processed_dir / DEFAULT_SELECTED_DIFF_NAME, selection)
 
             with (processed_dir / "A_matrix_dataset.pkl").open("rb") as handle:
                 a_dict = pickle.load(handle)
