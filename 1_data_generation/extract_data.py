@@ -1,3 +1,5 @@
+"""Build molecule- and reaction-level training artifacts from PySCF text outputs."""
+
 import argparse
 import csv
 import pickle
@@ -8,7 +10,7 @@ import numpy as np
 
 
 SR_HF_COEF = 0.167
-FITTING_GRID_IDS = {"250000974", "500000974"}
+FITTING_GRID_IDS = {"250974", "500974"}
 ENERGY_LABEL_MAP = {
     "Total energy in the final basis set": "Total energy",
     "Nuclear Repulsion Energy": "Nuclear Repulsion Energy",
@@ -41,19 +43,22 @@ REQUIRED_ENERGY_KEYS = {
 }
 
 
-def parse_args():
+def build_parser():
+    """Create the command-line parser for the extraction workflow."""
     parser = argparse.ArgumentParser(description="Extract training data from PySCF one-file text outputs.")
-    parser.add_argument("--input_data_dir", required=True, help="Directory containing one PySCF text file per molecule.")
-    parser.add_argument("--DatasetEval", required=True, help="DatasetEval CSV/TSV/XLSX file.")
-    parser.add_argument("--output_dir", default=".", help="Output directory for raw_data.dict and reaction_data.dict.")
-    return parser.parse_args()
+    parser.add_argument("--input-data-dir", required=True, help="Directory containing one PySCF text file per molecule.")
+    parser.add_argument("--dataset-eval", required=True, help="Dataset evaluation CSV file.")
+    parser.add_argument("--output-dir", default=".", help="Output directory for raw_data.pkl and reaction_data.pkl.")
+    return parser
 
 
 def _parse_float_after_equals(line):
+    """Parse the first numeric token appearing after an equals sign."""
     return float(line.split("=", 1)[1].strip().split()[0])
 
 
 def parse_pyscf_output(path):
+    """Parse one merged PySCF text file into the molecule artifact schema."""
     lines = path.read_text(encoding="utf-8").splitlines()
     info = {
         "Spin_consistent": None,
@@ -110,35 +115,34 @@ def parse_pyscf_output(path):
 
     for grid_label in grid_labels:
         if grid_label != "Fitting":
+            # Downstream optimization expects non-fitting grids to store deltas
+            # relative to the fitting grid rather than raw integratedDV values.
             info[grid_label] = info[grid_label] - info["Fitting"]
 
     return info
 
 
 def load_dataset_eval(path):
-    suffix = path.suffix.lower()
-    if suffix in {".csv", ".tsv"}:
-        delimiter = "\t" if suffix == ".tsv" else ","
-        with path.open("r", encoding="utf-8", newline="") as fh:
-            rows = list(csv.DictReader(fh, delimiter=delimiter))
-    elif suffix in {".xlsx", ".xls"}:
-        import pandas as pd
+    """Load the maintained dataset-evaluation CSV with normalized field types."""
+    if path.suffix.lower() != ".csv":
+        raise ValueError(f"{path}: dataset_eval must be a CSV file")
 
-        rows = pd.read_excel(path).to_dict(orient="records")
-    else:
-        raise ValueError(f"Unsupported DatasetEval format: {path}")
+    with path.open("r", encoding="utf-8", newline="") as fh:
+        reader = csv.DictReader(fh)
+        fieldnames = reader.fieldnames or []
+        required_columns = ["Reaction", "Reference", "Stoichiometry"]
+        missing = [column for column in required_columns if column not in fieldnames]
+        if missing:
+            raise ValueError(f"{path}: missing required columns: {', '.join(missing)}")
+        rows = list(reader)
 
     normalized_rows = []
     for idx, row in enumerate(rows):
-        reaction = row.get("Reaction") or row.get("reaction")
-        if not reaction:
-            reaction = str(idx)
+        reaction = row.get("Reaction")
         reference = row.get("Reference")
-        if reference is None:
-            reference = row.get("Reference Energy")
         stoichiometry = row.get("Stoichiometry")
-        if reference is None or stoichiometry is None:
-            raise ValueError(f"{path}: row {idx} is missing Reference/Reference Energy or Stoichiometry")
+        if not reaction or reference is None or stoichiometry is None:
+            raise ValueError(f"{path}: row {idx} is missing Reaction, Reference, or Stoichiometry")
         normalized_rows.append(
             {
                 "Reaction": str(reaction),
@@ -150,10 +154,12 @@ def load_dataset_eval(path):
 
 
 def is_supported_value(value):
+    """Return whether a molecule-level value can participate in reaction sums."""
     return isinstance(value, np.ndarray) or (isinstance(value, (int, float, np.floating)) and not isinstance(value, bool))
 
 
 def calculate_reaction(row, raw_data):
+    """Assemble one reaction entry by applying stoichiometric coefficients to species data."""
     tokens = [token.strip() for token in row["Stoichiometry"].split(",") if token.strip()]
     if len(tokens) % 2 != 0:
         raise ValueError(f"{row['Reaction']}: invalid Stoichiometry field")
@@ -179,19 +185,22 @@ def calculate_reaction(row, raw_data):
 
 
 def write_pickle(path, obj):
+    """Serialize a Python object to a pickle artifact."""
     with path.open("wb") as fh:
         pickle.dump(obj, fh)
 
 
 def write_log(path, messages):
+    """Write newline-delimited failure messages when any exist."""
     if messages:
         path.write_text("\n".join(messages) + "\n", encoding="utf-8")
 
 
-def main():
-    args = parse_args()
+def main(argv=None):
+    """Run the end-to-end extraction workflow and emit pickle artifacts."""
+    args = build_parser().parse_args(argv)
     input_data_dir = Path(args.input_data_dir).resolve()
-    dataset_eval_path = Path(args.DatasetEval).resolve()
+    dataset_eval_path = Path(args.dataset_eval).resolve()
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -215,15 +224,15 @@ def main():
         except Exception as exc:
             failed_reactions.append(str(exc))
 
-    write_pickle(output_dir / "raw_data.dict", raw_data)
-    write_pickle(output_dir / "reaction_data.dict", reactions)
+    write_pickle(output_dir / "raw_data.pkl", raw_data)
+    write_pickle(output_dir / "reaction_data.pkl", reactions)
     write_log(output_dir / "failed_files.log", failed_files)
     write_log(output_dir / "failed_reactions.log", failed_reactions)
 
     print(f"Parsed molecules: {len(raw_data)}")
     print(f"Built reactions: {len(reactions)}")
-    print(f"Wrote: {output_dir / 'raw_data.dict'}")
-    print(f"Wrote: {output_dir / 'reaction_data.dict'}")
+    print(f"Wrote: {output_dir / 'raw_data.pkl'}")
+    print(f"Wrote: {output_dir / 'reaction_data.pkl'}")
     if failed_files:
         print(f"Failed files logged to: {output_dir / 'failed_files.log'}")
     if failed_reactions:

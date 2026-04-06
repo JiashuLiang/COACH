@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from itertools import product
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 
@@ -14,27 +13,24 @@ from .constants import (
     DEFAULT_GRID_THRESHOLD,
     DEFAULT_MAX_COEFFICIENT,
     HARTREE_TO_KCAL_MOL,
-    W_B97M_V_COEF_289,
-    W_B97X_V_COEF_289,
 )
+from .physical_constraints import build_physical_constraints
 from .utils import ensure_directory, write_json
 
 
 def _vector_from_pairs(pairs: list[tuple[int, float]], size: int = 289) -> np.ndarray:
+    """Expand sparse ``(index, value)`` pairs into a dense coefficient vector."""
     vector = np.zeros(size, dtype=float)
     for index, value in pairs:
         vector[index] = value
     return vector
 
 
-DEFAULT_WARM_STARTS = {
-    "simple": _vector_from_pairs([(0, 0.85), (1, 1.0), (96, 1.0), (192, 1.0), (288, 0.15)]),
-    "wB97X-V": _vector_from_pairs(W_B97X_V_COEF_289),
-    "wB97M-V": _vector_from_pairs(W_B97M_V_COEF_289),
-}
+SIMPLE_WARM_START = _vector_from_pairs([(0, 0.85), (1, 1.0), (96, 1.0), (192, 1.0), (288, 0.15)])
 
 
 def _import_gurobi():
+    """Import Gurobi lazily so non-solver utilities remain usable without it."""
     try:
         import gurobipy as gp
         from gurobipy import GRB
@@ -45,152 +41,13 @@ def _import_gurobi():
     return gp, GRB
 
 
-def linear_expansion(values: np.ndarray, order: int) -> np.ndarray:
-    output = np.ones((order, values.shape[0]), dtype=float)
-    for index in range(1, order):
-        output[index] = output[index - 1] * values
-    return output.T
-
-
-def chebyshev_expansion(values: np.ndarray, order: int) -> np.ndarray:
-    output = np.ones((order, values.shape[0]), dtype=float)
-    output[1] = values
-    for index in range(2, order):
-        output[index] = 2.0 * values * output[index - 1] - output[index - 2]
-    return output.T
-
-
-def legendre_expansion(values: np.ndarray, order: int) -> np.ndarray:
-    output = np.ones((order, values.shape[0]), dtype=float)
-    output[1] = values
-    for index in range(2, order):
-        i_float = float(index)
-        output[index] = (
-            ((2.0 * i_float - 1.0) * values * output[index - 1]) - ((i_float - 1.0) * output[index - 2])
-        ) / i_float
-    return output.T
-
-
-def u_to_s2(values: np.ndarray) -> np.ndarray:
-    return 250.0 * values / (1.0 - values)
-
-
-def expansion_assist(us: np.ndarray, ws: np.ndarray, choice: int) -> tuple[np.ndarray, np.ndarray]:
-    if choice < 3:
-        us_expanded = linear_expansion(us, 8)
-    elif choice < 6:
-        us_expanded = legendre_expansion(us, 8)
-    else:
-        us_expanded = chebyshev_expansion(us, 8)
-
-    mgga_choice = choice % 3
-    if mgga_choice == 0:
-        ws_expanded = linear_expansion(ws, 12)
-    elif mgga_choice == 1:
-        ws_expanded = legendre_expansion(ws, 12)
-    else:
-        ws_expanded = chebyshev_expansion(ws, 12)
-    return us_expanded, ws_expanded
-
-
-def expansion(us: np.ndarray, ws: np.ndarray, choice: int, with_nonuniform_scaling: bool = False) -> np.ndarray:
-    us_expanded, ws_expanded = expansion_assist(us, ws, choice)
-    expansions = []
-    for i in range(us.shape[0]):
-        scale = 1.0
-        if with_nonuniform_scaling:
-            s2_value = u_to_s2(np.asarray([us[i]], dtype=float))[0]
-            scale = 1.0 - np.exp(-13.815 / s2_value ** 0.25)
-        for j in range(ws.shape[0]):
-            expansions.append(scale * np.outer(ws_expanded[j], us_expanded[i]).reshape(-1))
-    return np.asarray(expansions, dtype=float)
-
-
-def build_physical_constraints(a_rows: tuple[int, int, int]) -> dict[str, np.ndarray]:
-    exchange_choice = a_rows[0] % 18
-    same_spin_choice = a_rows[1] % 18
-    opposite_spin_choice = a_rows[2] % 18
-
-    exchange00_relation = expansion(np.asarray([0.0]), np.asarray([0.0]), exchange_choice).reshape(-1)
-
-    ws = np.asarray([-1.0, -0.7, -0.2, -0.08, -0.01, 0.01, 0.05, 0.1, 0.3, 0.5, 0.65, 0.7, 0.8, 0.95, 1.0])
-    us = np.asarray([0.001, 0.01, 0.1, 0.15, 0.22, 0.3, 0.6, 0.7, 0.85, 0.95, 0.99])
-
-    exchange_mode = a_rows[0] // 18
-    with_scaling = exchange_mode in (1, 3)
-    exchange_bounds = expansion(us, ws, exchange_choice, with_nonuniform_scaling=with_scaling)
-    same_spin_bounds = expansion(us, ws, same_spin_choice)
-    opposite_spin_bounds = expansion(us, ws, opposite_spin_choice)
-
-    if exchange_choice // 9 == 0:
-        s2_values = np.asarray(
-            [
-                0.3,
-                0.6,
-                1.2,
-                1.8,
-                2.4,
-                2.7,
-                3.0,
-                3.3,
-                3.6,
-                3.9,
-                4.2,
-                4.5,
-                4.8,
-                5.2,
-                5.6,
-                6.0,
-                6.6,
-                7.2,
-                7.8,
-                8.4,
-                9.0,
-                10.2,
-                11.4,
-                12.0,
-                13.2,
-                15.0,
-                18.0,
-                24.0,
-                36.0,
-                60.0,
-                120.0,
-            ]
-        )
-        constant = 5.0 / 3.0 / 4.0 / (6.0 * np.pi * np.pi) ** (2.0 / 3.0)
-        ux_array = 0.004 * s2_values / (1.0 + 0.004 * s2_values)
-        ws_array = (1.0 - s2_values * constant) / (1.0 + s2_values * constant)
-        us_expanded, ws_expanded = expansion_assist(ux_array, ws_array, exchange_choice)
-        constraint5 = []
-        for idx, s2_value in enumerate(s2_values):
-            scale = 1.0
-            if with_scaling:
-                scale = 1.0 - np.exp(-13.815 / s2_value ** 0.25)
-            constraint5.append(scale * np.outer(ws_expanded[idx], us_expanded[idx]).reshape(-1))
-        constraint5_array = np.asarray(constraint5, dtype=float)
-    else:
-        constraint5_array = expansion(
-            np.asarray([0.001, 0.01, 0.1, 0.15, 0.22, 0.3, 0.5, 0.6, 0.7, 0.85, 0.95, 0.99, 0.999]),
-            np.asarray([-1.0]),
-            exchange_choice,
-            with_nonuniform_scaling=with_scaling,
-        )
-
-    return {
-        "exchange00_relation": exchange00_relation,
-        "exchange_bounds": exchange_bounds,
-        "same_spin_bounds": same_spin_bounds,
-        "opposite_spin_bounds": opposite_spin_bounds,
-        "constraint5": constraint5_array,
-    }
-
-
 @dataclass
 class OptimizationConfig:
+    """Configuration for one optimization sweep over one or more sparsity levels."""
+
     nonzeros: list[int]
     a_rows: tuple[int, int, int] = DEFAULT_A_ROWS
-    repeats: int = 3
+    repeats: int = 1
     time_limit: int = 3600
     nthreads: int = 16
     verbose: bool = False
@@ -203,48 +60,41 @@ class OptimizationConfig:
     b_vec_name: str = "b_vec.npy"
     weight_name: str = "weight_vec.npy"
     diff_name: str | None = None
-    warm_start_files: list[str] = field(default_factory=list)
     warm_start_dir: str | None = None
-    include_reference_warm_starts: bool = True
 
 
 def _load_array(input_dir: str | Path, filename: str) -> np.ndarray:
+    """Load a NumPy array from the configured input directory."""
     return np.load(Path(input_dir) / filename, allow_pickle=False)
 
 
-def _load_warm_start_vectors(config: OptimizationConfig) -> list[np.ndarray]:
-    vectors: list[np.ndarray] = []
-    if config.include_reference_warm_starts:
-        vectors.extend(DEFAULT_WARM_STARTS.values())
+def _load_warm_start_vectors(config: OptimizationConfig, nonzeros: int) -> dict[str, np.ndarray]:
+    """Load the built-in simple seed plus the matching warm-start artifact for one sparsity."""
+    vectors: dict[str, np.ndarray] = {"simple": np.asarray(SIMPLE_WARM_START, dtype=float).copy()}
+    if not config.warm_start_dir:
+        return vectors
 
-    if config.warm_start_dir:
-        for path in sorted(Path(config.warm_start_dir).glob("betas_nonzero*.npy")):
-            data = np.load(path)
-            if data.ndim == 1:
-                vectors.append(data.astype(float))
-            else:
-                vectors.extend(np.asarray(data, dtype=float))
+    filename = Path(config.warm_start_dir) / f"betas_nonzero{nonzeros}.npy"
+    if not filename.exists():
+        return vectors
 
-    for filename in config.warm_start_files:
-        data = np.load(filename)
-        if data.ndim == 1:
-            vectors.append(data.astype(float))
+    key = str(filename).replace("/", "_")
+    data = np.load(filename, allow_pickle=False)
+    array = np.asarray(data, dtype=float)
+    if array.shape == (289,):
+        vectors[key] = array
+    elif array.ndim == 2 and array.shape[1] == 289:
+        if array.shape[0] == 1:
+            vectors[key] = array[0]
         else:
-            vectors.extend(np.asarray(data, dtype=float))
+            for idx, vector in enumerate(array):
+                vectors[f"{key}_{idx}"] = np.asarray(vector, dtype=float)
 
-    unique_vectors: list[np.ndarray] = []
-    seen: set[bytes] = set()
-    for vector in vectors:
-        if vector.shape != (289,):
-            continue
-        key = np.asarray(vector, dtype=float).round(12).tobytes()
-        if key not in seen:
-            seen.add(key)
-            unique_vectors.append(np.asarray(vector, dtype=float))
-    return unique_vectors
+    return vectors
 
 
 def weighted_rmse(a_matrix: np.ndarray, b_vec: np.ndarray, weights: np.ndarray, coeff: np.ndarray) -> float:
+    """Compute the training weighted RMSE in kcal/mol for one coefficient vector."""
     residual = b_vec - a_matrix @ coeff
     return float(np.sqrt(np.mean(np.square(residual) * weights)) * HARTREE_TO_KCAL_MOL)
 
@@ -258,6 +108,7 @@ def _solve_single_mio(
     diff_matrix: np.ndarray | None,
     warm_start: np.ndarray | None,
 ) -> np.ndarray:
+    """Solve one mixed-integer quadratic program for a fixed sparsity level."""
     gp, GRB = _import_gurobi()
     dim = x_matrix.shape[1]
     quad = x_matrix.T @ x_matrix
@@ -271,43 +122,50 @@ def _solve_single_mio(
             model.Params.OutputFlag = 0
 
         beta = model.addMVar(shape=dim, lb=-config.coefficient_bound, ub=config.coefficient_bound, name="beta")
-        include = model.addMVar(shape=dim, vtype=GRB.BINARY, name="include")
+        iszero = model.addVars(dim, vtype=GRB.BINARY, name="iszero") 
 
         if warm_start is not None and warm_start.shape == (dim,):
             beta.Start = warm_start
-            include.Start = (np.abs(warm_start) > 1e-8).astype(float)
+            for i in range(dim):
+                iszero[i].start = (abs(warm_start[i]) < 1e-6)
 
-        model.addConstr(beta <= config.coefficient_bound * include, name="beta_upper_bound")
-        model.addConstr(beta >= -config.coefficient_bound * include, name="beta_lower_bound")
-        model.addConstr(include.sum() <= nonzeros, name="sparsity_limit")
 
-        objective = gp.QuadExpr()
-        for i, j in product(range(dim), repeat=2):
-            objective += 0.5 * quad[i, j] * beta[i] * beta[j]
-        for i in range(dim):
-            objective -= lin[i] * beta[i]
-        objective += 0.5 * float(y_vec @ y_vec)
-        model.setObjective(objective, GRB.MINIMIZE)
+        obj = sum(0.5 * quad[i,j] * beta[i] * beta[j]
+                for i, j in product(range(dim), repeat=2))
+        obj -= sum(lin[i] * beta[i] for i in range(dim))
+        obj += 0.5 * float(y_vec @ y_vec)
+        model.setObjective(obj, GRB.MINIMIZE)
 
+        # Constraint sets, we use dim-1 because we apply "exchange00_relation" to eliminate one degree of freedom.
+        for i in range(dim-1):
+            # If iszero[i]=1, then beta[i] = 0
+            model.addSOS(GRB.SOS_TYPE1, [beta[i], iszero[i]])
+        model.addConstr(iszero.sum() == dim - nonzeros)
+
+
+        # The first 96 coefficients are exchange, the next 96 same-spin
+        # correlation, the next 96 opposite-spin correlation, and the final
+        # scalar is the SR-exchange mixing parameter.
         ex_rel = constraints["exchange00_relation"]
-        model.addConstr(ex_rel @ beta[:96] + beta[288] == 1.0, name="ueg_exchange")
+        model.addConstr(ex_rel @ beta[:96] + beta[-1] == 1.0, name="UEG_exchange00_constraint")
+        model.addConstr(beta[-1] <= 1.0, name="exchange00_max_constraint")
+        model.addConstr(beta[-1] >= 0.0, name="exchange00_min_constraint")
+        model.addConstr((constraints["gx_one_constraint"] - 1.479 * ex_rel) @ beta[:96] <= 0.0, name="gx_one_constraint")
 
-        for index, row in enumerate(constraints["exchange_bounds"]):
-            model.addConstr((row - 2.2146 * ex_rel) @ beta[:96] <= 0.0, name=f"gx_max_{index}")
-        for index, row in enumerate(constraints["same_spin_bounds"]):
-            model.addConstr(row @ beta[96:192] <= 10.0, name=f"gcss_max_{index}")
-            model.addConstr(row @ beta[96:192] >= -10.0, name=f"gcss_min_{index}")
-        for index, row in enumerate(constraints["opposite_spin_bounds"]):
-            model.addConstr(row @ beta[192:288] <= 10.0, name=f"gcos_max_{index}")
-            model.addConstr(row @ beta[192:288] >= -10.0, name=f"gcos_min_{index}")
-        for index, row in enumerate(constraints["constraint5"]):
-            model.addConstr((row - 1.479 * ex_rel) @ beta[:96] <= 0.0, name=f"gx_alpha0_{index}")
+        model.addConstr((constraints["exchange_bounds"] - 2.2146  * ex_rel) @ beta[:96] <= 0, name="gx_max_constraint")
+        model.addConstr(constraints["exchange_bounds"] @ beta[:96] >= 0, name="gx_min_constraint")
+        
+        model.addConstr(constraints["same_spin_bounds"] @ beta[96:192] <= 10, name="gcss_max_constraint")
+        model.addConstr(constraints["same_spin_bounds"] @ beta[96:192] >= -10, name="gcss_min_constraint")
+        model.addConstr(constraints["opposite_spin_bounds"] @ beta[192:288] <= 10, name="gcos_max_constraint")
+        model.addConstr(constraints["opposite_spin_bounds"] @ beta[192:288] >= -10, name="gcos_min_constraint")
 
+
+        # Add diff constraints |diff * beta| <= 0.015 kcal/mol (99590 vs 250974)
         if diff_matrix is not None:
-            threshold = config.grid_threshold / HARTREE_TO_KCAL_MOL
-            for index, row in enumerate(diff_matrix):
-                model.addConstr(row @ beta <= threshold, name=f"grid_diff_max_{index}")
-                model.addConstr(row @ beta >= -threshold, name=f"grid_diff_min_{index}")
+            threshold = config.grid_threshold / HARTREE_TO_KCAL_MOL  * 0.999 # Add a small safety margin to ensure the final model is below the threshold after rounding and unit conversion.
+            model.addConstr(diff_matrix @ beta <= threshold, name='diff_max_constraint')
+            model.addConstr(diff_matrix @ beta >= -threshold, name='diff_min_constraint')
 
         model.optimize()
         if model.Status == GRB.Status.INFEASIBLE:
@@ -318,6 +176,7 @@ def _solve_single_mio(
 
 
 def run_optimization_sweep(config: OptimizationConfig) -> dict[str, str]:
+    """Run the MIO solver for every requested sparsity level and save all candidates."""
     output_dir = ensure_directory(config.out_dir)
     a_matrix = _load_array(config.input_dir, config.a_matrix_name)
     b_vec = _load_array(config.input_dir, config.b_vec_name)
@@ -330,8 +189,6 @@ def run_optimization_sweep(config: OptimizationConfig) -> dict[str, str]:
     y_vec = b_vec * np.sqrt(weight_vec)
     physical_constraints = build_physical_constraints(config.a_rows)
     rng = np.random.default_rng(config.random_seed)
-    warm_start_pool = _load_warm_start_vectors(config)
-
     manifest = asdict(config)
     manifest["a_rows"] = list(config.a_rows)
     manifest["feature_count"] = int(a_matrix.shape[1])
@@ -340,40 +197,37 @@ def run_optimization_sweep(config: OptimizationConfig) -> dict[str, str]:
     write_json(output_dir / "run_config.json", manifest)
 
     for nonzeros in config.nonzeros:
+        warm_start_pool = _load_warm_start_vectors(config, nonzeros)
         candidates: list[np.ndarray] = []
-        seeds: list[np.ndarray | None] = []
-        if warm_start_pool:
-            seeds.extend(warm_start_pool)
-        while len(seeds) < max(config.repeats, 1):
-            seeds.append(None)
-
-        for repeat_index in range(max(config.repeats, 1)):
-            seed = seeds[repeat_index]
-            if seed is not None and repeat_index > 0:
-                noise = rng.normal(scale=0.05, size=seed.shape[0])
-                seed = seed + noise
-            elif seed is None:
-                seed = rng.normal(scale=0.1, size=a_matrix.shape[1])
-            beta = _solve_single_mio(
-                x_matrix=x_matrix,
-                y_vec=y_vec,
-                nonzeros=nonzeros,
-                constraints=physical_constraints,
-                config=config,
-                diff_matrix=diff_matrix,
-                warm_start=np.asarray(seed, dtype=float),
-            )
-            candidates.append(beta)
+        score_labels: list[str] = []
+        repeat_count = max(config.repeats, 1)
+        for warm_start_key, warm_start in warm_start_pool.items():
+            for repeat_index in range(repeat_count):
+                label = warm_start_key
+                seed = np.asarray(warm_start, dtype=float)
+                if repeat_count > 1:
+                    label = f"{label}_repeat_{repeat_index}"
+                if repeat_index > 0:
+                    noise = rng.normal(scale=0.05, size=seed.shape[0])
+                    seed = seed + noise
+                beta = _solve_single_mio(
+                    x_matrix=x_matrix,
+                    y_vec=y_vec,
+                    nonzeros=nonzeros,
+                    constraints=physical_constraints,
+                    config=config,
+                    diff_matrix=diff_matrix,
+                    warm_start=seed,
+                )
+                candidates.append(beta)
+                score_labels.append(label)
 
         beta_path = output_dir / f"betas_nonzero{nonzeros}.npy"
         np.save(beta_path, np.asarray(candidates, dtype=float))
 
         scores = [
-            {
-                "candidate_index": idx,
-                "wrmse_train_kcal_mol": weighted_rmse(a_matrix, b_vec, weight_vec, candidate),
-            }
-            for idx, candidate in enumerate(candidates)
+            {"label": label, "wrmse_train_kcal_mol": weighted_rmse(a_matrix, b_vec, weight_vec, candidate)}
+            for label, candidate in zip(score_labels, candidates, strict=True)
         ]
         write_json(output_dir / f"betas_nonzero{nonzeros}.json", scores)
 

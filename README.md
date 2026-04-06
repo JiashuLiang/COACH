@@ -4,18 +4,19 @@ COACH is a script-first workflow for training the COACH exchange-correlation fun
 
 ## Validation Status
 
-The original COACH workflow used Q-Chem. The PySCF-based path in this repository replaces that original route, but it has not been validated as extensively as the historical implementation. Treat generated data and fitted models as research artifacts that should be checked carefully before downstream use.
+The original COACH workflow used Q-Chem. The PySCF-based path in this repository replaces that original route, but it has not been validated as extensively as the earlier implementation. Treat generated data and fitted models as research artifacts that should be checked carefully before downstream use.
 
 ## Supported Workflow
 
 The maintained baseline pipeline is:
 
 1. Generate one PySCF text output per species with [`1_data_generation/pyscf_integrated_dv.py`](1_data_generation/pyscf_integrated_dv.py).
-2. Parse those outputs into `raw_data.dict` and `reaction_data.dict` with [`1_data_generation/extract_data.py`](1_data_generation/extract_data.py).
-3. Build legacy-compatible training arrays from reaction data plus CSV metadata with [`2_optimization/build_training_data.py`](2_optimization/build_training_data.py).
-4. Run mixed-integer optimization in two passes with [`2_optimization/run_mio.py`](2_optimization/run_mio.py).
+2. Parse those outputs into `raw_data.pkl` and `reaction_data.pkl` with [`1_data_generation/extract_data.py`](1_data_generation/extract_data.py).
+3. Prepare training and test data from reaction data plus CSV metadata with [`2_optimization/build_data.py`](2_optimization/build_data.py).
+4. Run mixed-integer optimization with [`2_optimization/run_mio.py`](2_optimization/run_mio.py).
 5. Select manuscript-style grid-sensitivity constraints with [`2_optimization/select_grid_constraints.py`](2_optimization/select_grid_constraints.py).
-6. Analyze fitted coefficient sets with [`2_optimization/analyze_results.py`](2_optimization/analyze_results.py).
+6. Run mixed-integer optimization again with  grid-sensitivity constraints with [`2_optimization/run_mio.py`](2_optimization/run_mio.py).
+7. Analyze fitted coefficient sets with [`2_optimization/analyze_results.py`](2_optimization/analyze_results.py).
 
 ## Requirements
 
@@ -23,7 +24,7 @@ The maintained baseline pipeline is:
 - `numpy`
 - `scipy` and `pyscf` for the data-generation stage
 - `gurobipy` plus a working Gurobi license for optimization
-- `pandas` only if you plan to pass Excel `DatasetEval` files to `extract_data.py`
+- `pandas`
 
 ## Metadata Setup
 
@@ -45,39 +46,38 @@ Adapt [`1_data_generation/pyscf_integrated_dv.py`](1_data_generation/pyscf_integ
 
 ```bash
 python3 1_data_generation/extract_data.py \
-  --input_data_dir path/to/pyscf_outputs \
-  --DatasetEval path/to/dataset_eval.csv \
-  --output_dir processed/raw
+  --input-data-dir path/to/pyscf_outputs \
+  --dataset-eval path/to/dataset_eval.csv \
+  --output-dir processed/raw
 ```
 
 This writes:
 
-- `processed/raw/raw_data.dict`
-- `processed/raw/reaction_data.dict`
+- `processed/raw/raw_data.pkl`
+- `processed/raw/reaction_data.pkl`
 - `processed/raw/failed_files.log` if parsing failures occur
 - `processed/raw/failed_reactions.log` if reactions cannot be assembled
 
-### 3. Build training artifacts
+### 3. Prepare training and test data
 
 ```bash
-python3 2_optimization/build_training_data.py \
-  --reaction-data default=processed/raw/reaction_data.dict \
-  --analysis-source default \
+python3 2_optimization/build_data.py \
+  --reaction-data processed/raw/reaction_data.pkl \
   --dataset-eval path/to/dataset_eval.csv \
   --training-weights path/to/training_weights.csv \
   --output-dir processed_data
 ```
 
-This writes the legacy-compatible core artifacts:
+This prepare training and test data, including the per-dataset dictionaries used in downstream analysis and testing:
 
 - `A_matrix.npy`
 - `b_vec.npy`
 - `weight_vec.npy`
-- `name_list.npy`
-- `A_matrix_dataset.dict`
-- `b_vec_dataset.dict`
+- `name_list_training.txt`
+- `A_matrix_dataset.pkl`
+- `b_vec_dataset.pkl`
 - `diff_99590.npy`
-- `name_list_diff_99590.npy`
+- `name_list_diff_99590.txt`
 
 ### 4. Pass 1 optimization
 
@@ -94,7 +94,7 @@ python3 2_optimization/run_mio.py \
 ```bash
 python3 2_optimization/select_grid_constraints.py \
   --diff-matrix processed_data/diff_99590.npy \
-  --diff-names processed_data/name_list_diff_99590.npy \
+  --diff-names processed_data/name_list_diff_99590.txt \
   --run-dir runs/pass1 \
   --output-dir processed_data
 ```
@@ -134,6 +134,7 @@ Analysis writes summary CSVs under `runs/pass2/analysis/` and selected coefficie
 - [`1_data_generation/`](1_data_generation): PySCF data extraction and matrix generation
 - [`2_optimization/`](2_optimization): preprocessing, optimization, grid-constraint selection, and analysis
 - [`Optimization.md`](Optimization.md): manuscript-side description of the fitting procedure
+- [`1_data_generation/qchem_codes_insert.C`](1_data_generation/qchem_codes_insert.C): reference-only Q-Chem/C++ source retained for comparison; it is not part of the maintained workflow
 
 ## Contact
 

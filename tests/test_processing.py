@@ -1,3 +1,5 @@
+"""Regression tests for preprocessing artifact generation."""
+
 import csv
 import pickle
 import sys
@@ -9,22 +11,24 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "2_optimization"))
 
-from coachopt.metadata import load_dataset_eval_csv, load_training_weights_csv
-from coachopt.processing import FeatureSpec, build_and_save_training_data
+from coachopt.constants import DEFAULT_A_ROWS, DEFAULT_DIFF_MATRIX_NAME, DEFAULT_GRID_KEY
+from coachopt.processing import build_and_save_data
+from coachopt.utils import read_csv_frame
 
 
 def synthetic_reaction(offset: float) -> dict:
+    """Create a compact synthetic reaction entry with production matrix shapes."""
     fitting = np.zeros((180, 96), dtype=float)
-    fitting[64] = offset + np.arange(96) * 0.01
-    fitting[153] = offset * 2.0 + np.arange(96) * 0.02
-    fitting[166] = offset * 3.0 + np.arange(96) * 0.03
+    fitting[DEFAULT_A_ROWS[0]] = offset + np.arange(96) * 0.01
+    fitting[DEFAULT_A_ROWS[1]] = offset * 2.0 + np.arange(96) * 0.02
+    fitting[DEFAULT_A_ROWS[2]] = offset * 3.0 + np.arange(96) * 0.03
     diff = np.zeros_like(fitting)
-    diff[64] = 0.001
-    diff[153] = 0.002
-    diff[166] = 0.003
+    diff[DEFAULT_A_ROWS[0]] = 0.001
+    diff[DEFAULT_A_ROWS[1]] = 0.002
+    diff[DEFAULT_A_ROWS[2]] = 0.003
     return {
         "Fitting": fitting,
-        "99000590": diff,
+        DEFAULT_GRID_KEY: diff,
         "Tofit": 1.0 + offset,
         "Alpha Short Range Exchange": 0.1 + offset,
         "Beta Short Range Exchange": 0.2 + offset,
@@ -34,10 +38,13 @@ def synthetic_reaction(offset: float) -> dict:
 
 
 class ProcessingTests(unittest.TestCase):
-    def test_build_and_save_training_data_preserves_legacy_outputs(self):
+    """Verify preprocessing outputs match the current artifact contract."""
+
+    def test_build_and_save_data_writes_expected_outputs(self):
+        """Write artifacts and confirm the expected filenames and array shapes."""
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-            reaction_path = root / "reaction_data.dict"
+            reaction_path = root / "reaction_data.pkl"
             dataset_eval_path = root / "dataset_eval.csv"
             weights_path = root / "training_weights.csv"
             out_dir = root / "processed"
@@ -60,39 +67,38 @@ class ProcessingTests(unittest.TestCase):
                 writer.writerow({"Reaction": "R3", "Dataset": "DS2", "Reference": "3.0", "Stoichiometry": "1,C"})
 
             with weights_path.open("w", encoding="utf-8", newline="") as handle:
-                writer = csv.DictWriter(
-                    handle, fieldnames=["Dataset", "Density Source", "datapoints", "weights"]
-                )
+                writer = csv.DictWriter(handle, fieldnames=["Dataset", "datapoints", "weights"])
                 writer.writeheader()
-                writer.writerow(
-                    {"Dataset": "DS1", "Density Source": "default", "datapoints": "All", "weights": "2.0"}
-                )
-                writer.writerow(
-                    {"Dataset": "DS2", "Density Source": "default", "datapoints": "R3", "weights": "Shrink"}
-                )
+                writer.writerow({"Dataset": "DS1", "datapoints": "All", "weights": "2.0"})
+                writer.writerow({"Dataset": "DS2", "datapoints": "R3", "weights": "Shrink"})
 
-            outputs = build_and_save_training_data(
-                reaction_sources={"default": reaction_data},
-                analysis_source="default",
-                dataset_eval_rows=load_dataset_eval_csv(dataset_eval_path),
-                training_weight_rows=load_training_weights_csv(weights_path),
+            outputs = build_and_save_data(
+                reaction_data=reaction_data,
+                dataset_eval=read_csv_frame(
+                    dataset_eval_path,
+                    ["Reaction", "Dataset", "Reference", "Stoichiometry"],
+                ),
+                training_weight=read_csv_frame(
+                    weights_path,
+                    ["Dataset", "datapoints", "weights"],
+                ),
                 output_dir=out_dir,
-                spec=FeatureSpec(),
             )
 
             a_matrix = np.load(out_dir / "A_matrix.npy")
             b_vec = np.load(out_dir / "b_vec.npy")
             weight_vec = np.load(out_dir / "weight_vec.npy")
-            diff_matrix = np.load(out_dir / "diff_99590.npy")
+            diff_matrix = np.load(out_dir / DEFAULT_DIFF_MATRIX_NAME)
 
             self.assertEqual(a_matrix.shape, (3, 289))
             self.assertEqual(b_vec.shape, (3,))
+            # "Shrink" with a single datapoint still evaluates to weight 1.0.
             self.assertEqual(weight_vec.tolist(), [2.0, 2.0, 1.0])
             self.assertEqual(diff_matrix.shape, (3, 289))
             self.assertTrue(np.allclose(diff_matrix[:, -1], 0.0))
-            self.assertTrue(Path(outputs["diff_matrix"]).name == "diff_99590.npy")
-            self.assertTrue((out_dir / "A_matrix_dataset.dict").exists())
-            self.assertTrue((out_dir / "b_vec_dataset.dict").exists())
+            self.assertTrue(Path(outputs["diff_matrix"]).name == DEFAULT_DIFF_MATRIX_NAME)
+            self.assertTrue((out_dir / "A_matrix_dataset.pkl").exists())
+            self.assertTrue((out_dir / "b_vec_dataset.pkl").exists())
 
 
 if __name__ == "__main__":

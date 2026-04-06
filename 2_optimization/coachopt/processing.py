@@ -1,71 +1,42 @@
-"""Training-data construction from reaction dictionaries plus CSV metadata."""
+"""Data-artifact construction from reaction dictionaries plus CSV metadata."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
-from .constants import DEFAULT_A_ROWS, DEFAULT_GRID_KEY
-from .utils import ensure_directory, save_name_array, save_pickle, write_json
-
-
-@dataclass(frozen=True)
-class FeatureSpec:
-    """Controls how the 289-parameter baseline feature vector is assembled."""
-
-    a_rows: tuple[int, int, int] = DEFAULT_A_ROWS
-
-    @property
-    def feature_count(self) -> int:
-        return len(self.a_rows) * 96 + 1
+from .constants import (
+    DEFAULT_A_ROWS,
+    DEFAULT_GRID_KEY,
+)
+from .utils import ensure_directory, save_names, save_pickle, write_json
 
 
-def _reaction_lookup(dataset_eval_rows: list[dict]) -> tuple[dict[str, dict], dict[str, list[str]]]:
-    by_reaction = {row["Reaction"]: row for row in dataset_eval_rows}
-    by_dataset: dict[str, list[str]] = {}
-    for row in dataset_eval_rows:
-        by_dataset.setdefault(row["Dataset"], []).append(row["Reaction"])
-    return by_reaction, by_dataset
+def feature_count(a_rows: tuple[int, ...]) -> int:
+    """Return the 289-feature width for the requested fitting rows."""
+    return len(a_rows) * 96 + 1
 
 
-def _feature_vector(reaction: dict, spec: FeatureSpec) -> tuple[np.ndarray, float]:
+def _feature_vector(reaction: dict, a_rows: tuple[int, ...]) -> tuple[np.ndarray, float]:
+    """Flatten selected fitting rows and append the short-range exchange feature."""
     fitting = np.asarray(reaction["Fitting"], dtype=float)
     if fitting.ndim != 2:
         raise ValueError("reaction['Fitting'] must be a 2D array")
-    if max(spec.a_rows) >= fitting.shape[0]:
+    if max(a_rows) >= fitting.shape[0]:
         raise ValueError(
-            f"A_rows {spec.a_rows} exceed available fitting rows ({fitting.shape[0]} total rows)"
+            f"A_rows {a_rows} exceed available fitting rows ({fitting.shape[0]} total rows)"
         )
-    features = fitting[list(spec.a_rows)].reshape(-1)
+    features = fitting[list(a_rows)].reshape(-1)
     b_value = float(reaction["Tofit"])
     sr_exchange = float(reaction["Alpha Short Range Exchange"]) + float(reaction["Beta Short Range Exchange"])
     features = np.concatenate([features, np.asarray([sr_exchange], dtype=float)])
     return features, b_value
 
 
-def build_dataset_matrices(
-    reaction_data: dict[str, dict],
-    dataset_eval_rows: list[dict],
-    spec: FeatureSpec,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
-    matrices: dict[str, list[np.ndarray]] = {}
-    targets: dict[str, list[float]] = {}
-    for row in dataset_eval_rows:
-        reaction_id = row["Reaction"]
-        if reaction_id not in reaction_data:
-            raise KeyError(f"Reaction {reaction_id!r} not found in reaction_data")
-        features, target = _feature_vector(reaction_data[reaction_id], spec)
-        matrices.setdefault(row["Dataset"], []).append(features)
-        targets.setdefault(row["Dataset"], []).append(target)
-    return (
-        {dataset: np.asarray(values, dtype=float) for dataset, values in matrices.items()},
-        {dataset: np.asarray(values, dtype=float) for dataset, values in targets.items()},
-    )
-
-
 def _weights_for_dataset(weight_spec: str, count: int) -> list[float]:
+    """Expand a supported weight specification into one scalar per reaction."""
     if weight_spec == "Shrink":
         return (1.0 / np.sqrt(np.arange(1, count + 1))).tolist()
     if weight_spec == "Shrink2":
@@ -74,140 +45,129 @@ def _weights_for_dataset(weight_spec: str, count: int) -> list[float]:
     return [value] * count
 
 
-def build_training_arrays(
-    reaction_sources: dict[str, dict[str, dict]],
-    dataset_eval_rows: list[dict],
-    training_weight_rows: list[dict],
-    spec: FeatureSpec,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
-    by_reaction, reactions_by_dataset = _reaction_lookup(dataset_eval_rows)
-    b_vec: list[float] = []
-    a_matrix: list[np.ndarray] = []
-    weight_vec: list[float] = []
-    name_list: list[str] = []
+def _selected_training_entries(
+    dataset: str,
+    datapoints: str,
+    reaction_entries: list[tuple[str, np.ndarray, float]],
+) -> list[tuple[str, np.ndarray, float]]:
+    """Resolve the ordered training reactions for one dataset-weight row."""
+    if datapoints == "All":
+        return reaction_entries
 
-    for row in training_weight_rows:
-        dataset = row["Dataset"]
-        source = row["Density Source"]
-        if source not in reaction_sources:
-            available = ", ".join(sorted(reaction_sources))
-            raise KeyError(f"Unknown Density Source {source!r}; available sources: {available}")
+    requested_ids = [item.strip() for item in datapoints.split(",") if item.strip()]
+    if not requested_ids:
+        raise ValueError(f"Dataset {dataset!r} has an empty datapoints field")
+
+    by_reaction = {reaction_id: (reaction_id, features, target) for reaction_id, features, target in reaction_entries}
+    selected_entries: list[tuple[str, np.ndarray, float]] = []
+    for reaction_id in requested_ids:
+        if reaction_id not in by_reaction:
+            raise KeyError(f"Reaction {reaction_id!r} was not found in dataset_eval metadata for dataset {dataset!r}")
+        selected_entries.append(by_reaction[reaction_id])
+    return selected_entries
+
+
+def build_and_save_data(
+    reaction_data: dict[str, dict],
+    dataset_eval: pd.DataFrame,
+    training_weight: pd.DataFrame,
+    output_dir: str | Path,
+    a_rows: tuple[int, ...] = DEFAULT_A_ROWS,
+    diff_grid: str = DEFAULT_GRID_KEY,
+) -> dict[str, str]:
+    """Build all preprocessing artifacts expected by the cleaned optimization pipeline."""
+    reactions_by_dataset: dict[str, list[str]] = {}
+    a_matrix_dataset_rows: dict[str, list[np.ndarray]] = {}
+    b_vec_dataset_rows: dict[str, list[float]] = {}
+    diff_rows: list[np.ndarray] = []
+    diff_names: list[str] = []
+    a_matrix_rows: list[np.ndarray] = []
+    b_vec_rows: list[float] = []
+    weight_rows: list[float] = []
+    name_list: list[str] = []
+    training_rows_by_dataset: dict[str, list] = {}
+    for row in training_weight.itertuples(index=False):
+        training_rows_by_dataset.setdefault(row.Dataset, []).append(row)
+
+    for dataset, df_dataset in dataset_eval.groupby("Dataset", sort=False):
+        reaction_entries: list[tuple[str, np.ndarray, float]] = []
+
+        for row in df_dataset.itertuples(index=False):
+            reaction_id = row.Reaction
+            if reaction_id not in reaction_data:
+                raise KeyError(f"Reaction {reaction_id!r} not found in reaction_data")
+
+            reaction = reaction_data[reaction_id]
+            features, target = _feature_vector(reaction, a_rows)
+            reaction_entries.append((reaction_id, features, target))
+            reactions_by_dataset.setdefault(dataset, []).append(reaction_id)
+            a_matrix_dataset_rows.setdefault(dataset, []).append(features)
+            b_vec_dataset_rows.setdefault(dataset, []).append(target)
+
+            if diff_grid in reaction:
+                diff_features = np.asarray(reaction[diff_grid], dtype=float)
+                selected = diff_features[list(a_rows)].reshape(-1)
+                # The final feature is the SR-exchange scalar, which is not part of
+                # grid-difference constraints, so the diff row gets a trailing zero.
+                diff_rows.append(np.concatenate([selected, np.asarray([0.0], dtype=float)]))
+                diff_names.append(reaction_id)
+
+        if dataset not in training_rows_by_dataset:
+            continue
+
+        for training_row in training_rows_by_dataset[dataset]:
+            selected_entries = _selected_training_entries(dataset, training_row.datapoints, reaction_entries)
+            weights = _weights_for_dataset(training_row.weights, len(selected_entries))
+            for reaction_id, features, target in selected_entries:
+                a_matrix_rows.append(features)
+                b_vec_rows.append(target)
+                name_list.append(reaction_id)
+            weight_rows.extend(weights)
+
+    for dataset in training_rows_by_dataset:
         if dataset not in reactions_by_dataset:
             raise KeyError(f"Dataset {dataset!r} was not found in dataset_eval metadata")
 
-        if row["datapoints"] == "All":
-            reaction_ids = reactions_by_dataset[dataset]
-        else:
-            reaction_ids = [item.strip() for item in row["datapoints"].split(",") if item.strip()]
-            if not reaction_ids:
-                raise ValueError(f"Dataset {dataset!r} has an empty datapoints field")
-            for reaction_id in reaction_ids:
-                if reaction_id not in by_reaction:
-                    raise KeyError(f"Reaction {reaction_id!r} was not found in dataset_eval metadata")
-                if by_reaction[reaction_id]["Dataset"] != dataset:
-                    raise ValueError(
-                        f"Reaction {reaction_id!r} belongs to dataset "
-                        f"{by_reaction[reaction_id]['Dataset']!r}, not {dataset!r}"
-                    )
-
-        weights = _weights_for_dataset(row["weights"], len(reaction_ids))
-        for reaction_id in reaction_ids:
-            reaction_data = reaction_sources[source]
-            if reaction_id not in reaction_data:
-                raise KeyError(f"Reaction {reaction_id!r} not found in source {source!r}")
-            features, target = _feature_vector(reaction_data[reaction_id], spec)
-            a_matrix.append(features)
-            b_vec.append(target)
-            name_list.append(reaction_id)
-        weight_vec.extend(weights)
-
-    return (
-        np.asarray(b_vec, dtype=float),
-        np.asarray(a_matrix, dtype=float),
-        np.asarray(weight_vec, dtype=float),
-        name_list,
-    )
-
-
-def build_diff_matrix(
-    reaction_data: dict[str, dict],
-    dataset_eval_rows: list[dict],
-    spec: FeatureSpec,
-    diff_grid: str = DEFAULT_GRID_KEY,
-) -> tuple[np.ndarray, list[str]]:
-    rows: list[np.ndarray] = []
-    names: list[str] = []
-    for row in dataset_eval_rows:
-        reaction = reaction_data[row["Reaction"]]
-        if diff_grid not in reaction:
-            continue
-        diff_features = np.asarray(reaction[diff_grid], dtype=float)
-        selected = diff_features[list(spec.a_rows)].reshape(-1)
-        selected = np.concatenate([selected, np.asarray([0.0], dtype=float)])
-        rows.append(selected)
-        names.append(row["Reaction"])
-    return np.asarray(rows, dtype=float), names
-
-
-def artifact_grid_suffix(grid_key: str) -> str:
-    """Convert raw grid ids like 99000590 into legacy artifact names like 99590."""
-    if not grid_key.isdigit() or len(grid_key) < 3:
-        return grid_key
-    prefix = grid_key[:2]
-    remainder = str(int(grid_key[2:]))
-    return f"{prefix}{remainder}"
-
-
-def build_and_save_training_data(
-    reaction_sources: dict[str, dict[str, dict]],
-    analysis_source: str,
-    dataset_eval_rows: list[dict],
-    training_weight_rows: list[dict],
-    output_dir: str | Path,
-    spec: FeatureSpec,
-    diff_grid: str = DEFAULT_GRID_KEY,
-) -> dict[str, str]:
-    if analysis_source not in reaction_sources:
-        raise KeyError(f"Analysis source {analysis_source!r} was not supplied")
-
     output_dir = ensure_directory(output_dir)
-    analysis_reactions = reaction_sources[analysis_source]
-    a_matrix_dict, b_vec_dict = build_dataset_matrices(analysis_reactions, dataset_eval_rows, spec)
-    b_vec, a_matrix, weight_vec, name_list = build_training_arrays(
-        reaction_sources, dataset_eval_rows, training_weight_rows, spec
-    )
-    diff_matrix, diff_names = build_diff_matrix(analysis_reactions, dataset_eval_rows, spec, diff_grid=diff_grid)
-    diff_suffix = artifact_grid_suffix(diff_grid)
-
+    a_matrix = np.asarray(a_matrix_rows, dtype=float)
+    b_vec = np.asarray(b_vec_rows, dtype=float)
+    weight_vec = np.asarray(weight_rows, dtype=float)
+    a_matrix_dataset = {
+        dataset: np.asarray(values, dtype=float) for dataset, values in a_matrix_dataset_rows.items()
+    }
+    b_vec_dataset = {
+        dataset: np.asarray(values, dtype=float) for dataset, values in b_vec_dataset_rows.items()
+    }
+    diff_matrix = np.asarray(diff_rows, dtype=float)
     np.save(output_dir / "A_matrix.npy", a_matrix)
     np.save(output_dir / "b_vec.npy", b_vec)
     np.save(output_dir / "weight_vec.npy", weight_vec)
-    save_name_array(output_dir / "name_list.npy", name_list)
-    save_pickle(output_dir / "A_matrix_dataset.dict", a_matrix_dict)
-    save_pickle(output_dir / "b_vec_dataset.dict", b_vec_dict)
-    np.save(output_dir / f"diff_{diff_suffix}.npy", diff_matrix)
-    save_name_array(output_dir / f"name_list_diff_{diff_suffix}.npy", diff_names)
+    save_names(output_dir / "name_list_training.txt", name_list)
+    save_pickle(output_dir / "A_matrix_dataset.pkl", a_matrix_dataset)
+    save_pickle(output_dir / "b_vec_dataset.pkl", b_vec_dataset)
+    np.save(output_dir / f"diff_{diff_grid}.npy", diff_matrix)
+    save_names(output_dir / f"name_list_diff_{diff_grid}.txt", diff_names)
 
-    manifest = {
-        "analysis_source": analysis_source,
-        "a_rows": list(spec.a_rows),
-        "feature_count": spec.feature_count,
-        "training_rows": int(a_matrix.shape[0]),
-        "dataset_count": len(a_matrix_dict),
-        "diff_grid": diff_grid,
-        "diff_suffix": diff_suffix,
-        "diff_rows": int(diff_matrix.shape[0]),
-    }
-    write_json(output_dir / "build_manifest.json", manifest)
+    write_json(
+        output_dir / "build_manifest.json",
+        {
+            "a_rows": list(a_rows),
+            "feature_count": feature_count(a_rows),
+            "training_rows": len(a_matrix_rows),
+            "dataset_count": len(a_matrix_dataset),
+            "diff_grid": diff_grid,
+            "diff_rows": len(diff_rows),
+        },
+    )
 
     return {
         "A_matrix": str(output_dir / "A_matrix.npy"),
         "b_vec": str(output_dir / "b_vec.npy"),
         "weight_vec": str(output_dir / "weight_vec.npy"),
-        "name_list": str(output_dir / "name_list.npy"),
-        "A_matrix_dataset": str(output_dir / "A_matrix_dataset.dict"),
-        "b_vec_dataset": str(output_dir / "b_vec_dataset.dict"),
-        "diff_matrix": str(output_dir / f"diff_{diff_suffix}.npy"),
-        "diff_names": str(output_dir / f"name_list_diff_{diff_suffix}.npy"),
+        "name_list_training": str(output_dir / "name_list_training.txt"),
+        "A_matrix_dataset": str(output_dir / "A_matrix_dataset.pkl"),
+        "b_vec_dataset": str(output_dir / "b_vec_dataset.pkl"),
+        "diff_matrix": str(output_dir / f"diff_{diff_grid}.npy"),
+        "diff_names": str(output_dir / f"name_list_diff_{diff_grid}.txt"),
         "manifest": str(output_dir / "build_manifest.json"),
     }

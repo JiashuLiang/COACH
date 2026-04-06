@@ -4,12 +4,11 @@ This directory contains the maintained script-first COACH optimization workflow.
 
 ## Workflow
 
-1. Build training artifacts from `reaction_data.dict` plus populated CSV metadata:
+1. Prepare training and test data from `reaction_data.pkl` plus populated CSV metadata:
 
    ```bash
-   python3 2_optimization/build_training_data.py \
-     --reaction-data default=processed/raw/reaction_data.dict \
-     --analysis-source default \
+   python3 2_optimization/build_data.py \
+     --reaction-data processed/raw/reaction_data.pkl \
      --dataset-eval path/to/dataset_eval.csv \
      --training-weights path/to/training_weights.csv \
      --output-dir processed_data
@@ -30,10 +29,12 @@ This directory contains the maintained script-first COACH optimization workflow.
    ```bash
    python3 2_optimization/select_grid_constraints.py \
      --diff-matrix processed_data/diff_99590.npy \
-     --diff-names processed_data/name_list_diff_99590.npy \
+     --diff-names processed_data/name_list_diff_99590.txt \
      --run-dir runs/pass1 \
      --output-dir processed_data
    ```
+
+   Add `--show-largesterror` if you want the script to print the 20 largest diff names for each beta candidate.
 
 4. Run pass 2 with the selected constraints:
 
@@ -57,22 +58,6 @@ This directory contains the maintained script-first COACH optimization workflow.
      --dataset-info path/to/dataset_info.csv
    ```
 
-## One-shot Runner
-
-[`run_workflow.py`](run_workflow.py) orchestrates preprocessing, pass 1, row selection, pass 2, and analysis in one command:
-
-```bash
-python3 2_optimization/run_workflow.py \
-  --reaction-data default=processed/raw/reaction_data.dict \
-  --analysis-source default \
-  --dataset-eval path/to/dataset_eval.csv \
-  --training-weights path/to/training_weights.csv \
-  --dataset-info path/to/dataset_info.csv \
-  --processed-dir processed_data \
-  --run-root runs/full \
-  -n 24 32 40
-```
-
 ## Metadata Contract
 
 Start from the header templates in [`templates/`](templates) and populate them with your project data.
@@ -80,7 +65,7 @@ Start from the header templates in [`templates/`](templates) and populate them w
 - `dataset_eval.csv`
   - Required columns: `Reaction,Dataset,Reference,Stoichiometry`
 - `training_weights.csv`
-  - Required columns: `Dataset,Density Source,datapoints,weights`
+  - Required columns: `Dataset,datapoints,weights`
   - `datapoints` supports `All` or a comma-separated reaction list.
   - `weights` supports a numeric value, `Shrink`, or `Shrink2`.
 - `dataset_info.csv`
@@ -88,22 +73,20 @@ Start from the header templates in [`templates/`](templates) and populate them w
 
 ## Outputs
 
-Preprocessing writes legacy-compatible artifacts:
+Preprocessing writes:
 
 - `A_matrix.npy`
 - `b_vec.npy`
 - `weight_vec.npy`
-- `name_list.npy`
-- `A_matrix_dataset.dict`
-- `b_vec_dataset.dict`
+- `name_list_training.txt`
+- `A_matrix_dataset.pkl`
+- `b_vec_dataset.pkl`
 - `diff_99590.npy`
-- `name_list_diff_99590.npy`
+- `name_list_diff_99590.txt`
 
 Constraint selection writes:
 
 - `diff_constraint_99590.npy`
-- `name_list_diff_constraint_99590.npy`
-- `diff_constraint_99590.json`
 
 Optimization writes one `betas_nonzero<N>.npy` file per sparsity plus `run_config.json`.
 
@@ -118,3 +101,16 @@ Analysis writes:
 
 - The cleaned baseline workflow is the manuscript baseline only: 289 parameters, `A_rows = [64, 153, 166]`, and one grid-sensitive second pass against the 99,590 grid.
 - Gurobi is required only for optimization. Preprocessing, constraint selection, and most analysis utilities do not require it.
+
+## `run_mio.py` Options
+
+The examples above show the minimal baseline commands. [`run_mio.py`](run_mio.py) also supports these optional flags:
+
+- `--config_file`: load defaults from a JSON or YAML config file.
+  Use [`templates/run_mio.yaml`](templates/run_mio.yaml) as the starting template. Values in the config file act as defaults, and explicit CLI arguments override them.
+- `--nonzeros`, `--nthreads`, `--repeats`, `--time_limit`, `--random_seed`, `--verbose`: control sweep size and solver runtime behavior. `--repeats` is the number of solves to run for each warm start and defaults to `1`.
+- `--input_dir`, `--out_dir`: choose where optimization reads inputs and writes outputs.
+- `--A_rows`: override the three fitting rows used to define the 289-parameter baseline.
+- `--bvec_name`, `--Amatrix_name`, `--weight_name`, `--diff_name`: override input artifact filenames inside `--input_dir`.
+- `--with_diff`, `--grid_thresh`: enable diff-matrix constraints and set the threshold in kcal/mol.
+- `--warm_start_dir`: for each requested sparsity, load `betas_nonzero<N>.npy` from this directory after the built-in `simple` seed. This matches the pass-1 to pass-2 handoff when adding selected grid constraints.

@@ -1,3 +1,5 @@
+"""Generate integratedDV matrices from PySCF using the cleaned COACH baseline layout."""
+
 import math
 from pathlib import Path
 
@@ -545,14 +547,14 @@ def build_grid(mol, radial, angular):
         Tuple ``(coords, weights, grid_id)``:
         - coords: 2D array of Cartesian grid coordinates.
         - weights: 1D quadrature weights.
-        - grid_id: Integer id computed as ``radial * 1_000_000 + angular``.
+        - grid_id: Integer shorthand id computed as ``int(f"{radial}{angular:03d}")``.
     """
     grids = dft.gen_grid.Grids(mol)
     grids.atom_grid = (radial, angular)
     grids.prune = None
     grids.radii_adjust = None
     grids.build(with_non0tab=False)
-    grid_id = radial * 1_000_000 + angular
+    grid_id = int(f"{radial}{angular:03d}")
     return grids.coords, grids.weights, grid_id
 
 
@@ -703,13 +705,12 @@ def main():
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     mol, dm_a, dm_b, mf = build_mol_and_dm()
-    
+
     energy_breakdown = compute_pyscf_energy_breakdown(mf, dm_a, dm_b)
     ref = REFERENCE_ENERGY_BREAKDOWN
     energy_breakdown_text = format_energy_breakdown(energy_breakdown, ref)
 
     print(energy_breakdown_text, end="")
-
 
     ni = dft.numint.NumInt()
 

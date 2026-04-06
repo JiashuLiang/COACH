@@ -1,2 +1,5 @@
 __pycache__/
 *.py[cod]
+.codex
+*.egg-info
+AGENTS.md
