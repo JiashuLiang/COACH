@@ -36,7 +36,7 @@ def _feature_vector(reaction: dict, a_rows: tuple[int, ...]) -> tuple[np.ndarray
 
 
 def _weights_for_dataset(weight_spec: str, count: int) -> list[float]:
-    """Expand a legacy weight specification into one scalar per reaction."""
+    """Expand a supported weight specification into one scalar per reaction."""
     if weight_spec == "Shrink":
         return (1.0 / np.sqrt(np.arange(1, count + 1))).tolist()
     if weight_spec == "Shrink2":
@@ -46,7 +46,7 @@ def _weights_for_dataset(weight_spec: str, count: int) -> list[float]:
 
 
 def artifact_grid_suffix(grid_key: str) -> str:
-    """Convert raw grid ids like 99000590 into legacy artifact names like 99590."""
+    """Convert raw grid ids like 99000590 into artifact names like 99590."""
     if not grid_key.isdigit() or len(grid_key) < 3:
         return grid_key
     prefix = grid_key[:2]
@@ -142,8 +142,8 @@ def build_and_save_data(
     np.save(output_dir / "b_vec.npy", b_vec)
     np.save(output_dir / "weight_vec.npy", weight_vec)
     save_name_array(output_dir / "name_list.npy", name_list)
-    save_pickle(output_dir / "A_matrix_dataset.dict", a_matrix_dataset)
-    save_pickle(output_dir / "b_vec_dataset.dict", b_vec_dataset)
+    save_pickle(output_dir / "A_matrix_dataset.pkl", a_matrix_dataset)
+    save_pickle(output_dir / "b_vec_dataset.pkl", b_vec_dataset)
     np.save(output_dir / f"diff_{diff_suffix}.npy", diff_matrix)
     save_name_array(output_dir / f"name_list_diff_{diff_suffix}.npy", diff_names)
 
@@ -165,8 +165,8 @@ def build_and_save_data(
         "b_vec": str(output_dir / "b_vec.npy"),
         "weight_vec": str(output_dir / "weight_vec.npy"),
         "name_list": str(output_dir / "name_list.npy"),
-        "A_matrix_dataset": str(output_dir / "A_matrix_dataset.dict"),
-        "b_vec_dataset": str(output_dir / "b_vec_dataset.dict"),
+        "A_matrix_dataset": str(output_dir / "A_matrix_dataset.pkl"),
+        "b_vec_dataset": str(output_dir / "b_vec_dataset.pkl"),
         "diff_matrix": str(output_dir / f"diff_{diff_suffix}.npy"),
         "diff_names": str(output_dir / f"name_list_diff_{diff_suffix}.npy"),
         "manifest": str(output_dir / "build_manifest.json"),

@@ -48,7 +48,7 @@ def build_parser():
     parser = argparse.ArgumentParser(description="Extract training data from PySCF one-file text outputs.")
     parser.add_argument("--input-data-dir", required=True, help="Directory containing one PySCF text file per molecule.")
     parser.add_argument("--dataset-eval", required=True, help="Dataset evaluation CSV file.")
-    parser.add_argument("--output-dir", default=".", help="Output directory for raw_data.dict and reaction_data.dict.")
+    parser.add_argument("--output-dir", default=".", help="Output directory for raw_data.pkl and reaction_data.pkl.")
     return parser
 
 
@@ -58,7 +58,7 @@ def _parse_float_after_equals(line):
 
 
 def parse_pyscf_output(path):
-    """Parse one merged PySCF text file into the legacy molecule artifact schema."""
+    """Parse one merged PySCF text file into the molecule artifact schema."""
     lines = path.read_text(encoding="utf-8").splitlines()
     info = {
         "Spin_consistent": None,
@@ -185,7 +185,7 @@ def calculate_reaction(row, raw_data):
 
 
 def write_pickle(path, obj):
-    """Serialize a Python object using the legacy pickle artifact format."""
+    """Serialize a Python object to a pickle artifact."""
     with path.open("wb") as fh:
         pickle.dump(obj, fh)
 
@@ -197,7 +197,7 @@ def write_log(path, messages):
 
 
 def main(argv=None):
-    """Run the end-to-end extraction workflow and emit legacy artifact files."""
+    """Run the end-to-end extraction workflow and emit pickle artifacts."""
     args = build_parser().parse_args(argv)
     input_data_dir = Path(args.input_data_dir).resolve()
     dataset_eval_path = Path(args.dataset_eval).resolve()
@@ -224,15 +224,15 @@ def main(argv=None):
         except Exception as exc:
             failed_reactions.append(str(exc))
 
-    write_pickle(output_dir / "raw_data.dict", raw_data)
-    write_pickle(output_dir / "reaction_data.dict", reactions)
+    write_pickle(output_dir / "raw_data.pkl", raw_data)
+    write_pickle(output_dir / "reaction_data.pkl", reactions)
     write_log(output_dir / "failed_files.log", failed_files)
     write_log(output_dir / "failed_reactions.log", failed_reactions)
 
     print(f"Parsed molecules: {len(raw_data)}")
     print(f"Built reactions: {len(reactions)}")
-    print(f"Wrote: {output_dir / 'raw_data.dict'}")
-    print(f"Wrote: {output_dir / 'reaction_data.dict'}")
+    print(f"Wrote: {output_dir / 'raw_data.pkl'}")
+    print(f"Wrote: {output_dir / 'reaction_data.pkl'}")
     if failed_files:
         print(f"Failed files logged to: {output_dir / 'failed_files.log'}")
     if failed_reactions:

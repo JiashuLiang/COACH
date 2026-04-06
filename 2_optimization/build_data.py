@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build legacy-compatible optimization artifacts from CSV metadata and reaction_data.dict."""
+"""Build optimization artifacts from CSV metadata and reaction_data.pkl."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--reaction-data",
         required=True,
-        help="Path to reaction_data.dict",
+        help="Path to reaction_data.pkl",
     )
     parser.add_argument("--dataset-eval", required=True, help="Path to dataset_eval.csv")
     parser.add_argument("--training-weights", required=True, help="Path to training_weights.csv")

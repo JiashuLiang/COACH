@@ -93,9 +93,9 @@ class WorkflowSmokeTests(unittest.TestCase):
             np.save(processed_dir / "diff_constraint_99590.npy", selection.rows)
             save_name_array(processed_dir / "name_list_diff_constraint_99590.npy", selection.names)
 
-            with (processed_dir / "A_matrix_dataset.dict").open("rb") as handle:
+            with (processed_dir / "A_matrix_dataset.pkl").open("rb") as handle:
                 a_dict = pickle.load(handle)
-            with (processed_dir / "b_vec_dataset.dict").open("rb") as handle:
+            with (processed_dir / "b_vec_dataset.pkl").open("rb") as handle:
                 b_dict = pickle.load(handle)
             self.assertEqual(set(a_dict), {"DS1", "DS2"})
             self.assertEqual(set(b_dict), {"DS1", "DS2"})

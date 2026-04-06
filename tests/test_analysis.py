@@ -34,9 +34,9 @@ class AnalysisTests(unittest.TestCase):
             np.save(processed / "b_vec.npy", b_vec)
             np.save(processed / "weight_vec.npy", weights)
             np.save(processed / "diff_99590.npy", diff)
-            with (processed / "A_matrix_dataset.dict").open("wb") as handle:
+            with (processed / "A_matrix_dataset.pkl").open("wb") as handle:
                 pickle.dump({"DS1": a_matrix[:1], "DS2": a_matrix[1:]}, handle)
-            with (processed / "b_vec_dataset.dict").open("wb") as handle:
+            with (processed / "b_vec_dataset.pkl").open("wb") as handle:
                 pickle.dump({"DS1": b_vec[:1], "DS2": b_vec[1:]}, handle)
 
             good = np.asarray([1.0, 1.0, 0.0], dtype=float)

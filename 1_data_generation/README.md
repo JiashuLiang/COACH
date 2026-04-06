@@ -36,12 +36,12 @@ python3 1_data_generation/extract_data.py \
 
 The script writes:
 
-- `raw_data.dict`
-- `reaction_data.dict`
+- `raw_data.pkl`
+- `reaction_data.pkl`
 - `failed_files.log` when parsing failures occur
 - `failed_reactions.log` when a reaction cannot be assembled from the parsed species
 
-## `reaction_data.dict` Structure
+## `reaction_data.pkl` Structure
 
 Each reaction entry stores:
 
@@ -59,7 +59,7 @@ The downstream optimization pipeline assumes:
 ## Reference Files
 
 - [`SIE4x4_h2o.out`](SIE4x4_h2o.out): sample text output used for parser validation
-- [`qchem_codes_insert.C`](qchem_codes_insert.C): original Q-Chem/C++ reference implementation retained for provenance
+- [`qchem_codes_insert.C`](qchem_codes_insert.C): reference-only Q-Chem/C++ implementation; it is not part of the maintained workflow
 - [`pyscf_integratedDV_matrices.txt`](pyscf_integratedDV_matrices.txt): matrix notes and reference data used during the PySCF port
 
 `extract_data.py` is the maintained extraction interface for the supported workflow.

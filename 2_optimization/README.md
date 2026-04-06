@@ -4,11 +4,11 @@ This directory contains the maintained script-first COACH optimization workflow.
 
 ## Workflow
 
-1. Prepare training and test data from `reaction_data.dict` plus populated CSV metadata:
+1. Prepare training and test data from `reaction_data.pkl` plus populated CSV metadata:
 
    ```bash
    python3 2_optimization/build_data.py \
-     --reaction-data processed/raw/reaction_data.dict \
+     --reaction-data processed/raw/reaction_data.pkl \
      --dataset-eval path/to/dataset_eval.csv \
      --training-weights path/to/training_weights.csv \
      --output-dir processed_data
@@ -71,14 +71,14 @@ Start from the header templates in [`templates/`](templates) and populate them w
 
 ## Outputs
 
-Preprocessing writes legacy-compatible artifacts:
+Preprocessing writes:
 
 - `A_matrix.npy`
 - `b_vec.npy`
 - `weight_vec.npy`
 - `name_list.npy`
-- `A_matrix_dataset.dict`
-- `b_vec_dataset.dict`
+- `A_matrix_dataset.pkl`
+- `b_vec_dataset.pkl`
 - `diff_99590.npy`
 - `name_list_diff_99590.npy`
 
@@ -113,4 +113,3 @@ The examples above show the minimal baseline commands. [`run_mio.py`](run_mio.py
 - `--bvec_name`, `--Amatrix_name`, `--weight_name`, `--diff_name`: override input artifact filenames inside `--input_dir`.
 - `--with_diff`, `--grid_thresh`: enable diff-matrix constraints and set the threshold in kcal/mol.
 - `--warm_start_dir`, `--warm_start_file`, `--no_reference_warm_starts`: control warm-start sources.
-- `--with_diff2`, `--diff2_name`, `--grid_thresh2`: compatibility flags retained by the script. They are accepted, but the cleaned baseline workflow ignores them.

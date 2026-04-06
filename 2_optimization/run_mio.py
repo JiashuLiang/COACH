@@ -46,7 +46,6 @@ def build_parser(defaults: dict | None = None) -> argparse.ArgumentParser:
     parser.add_argument("--repeats", type=int, default=defaults.get("repeats", 3))
     parser.add_argument("--time_limit", type=int, default=defaults.get("time_limit", 3600))
     parser.add_argument("--with_diff", action="store_true", default=defaults.get("with_diff", False))
-    parser.add_argument("--with_diff2", action="store_true", default=defaults.get("with_diff2", False))
     parser.add_argument("--verbose", action="store_true", default=defaults.get("verbose", False))
     parser.add_argument("--input_dir", type=str, default=defaults.get("input_dir", "."))
     parser.add_argument("--out_dir", type=str, default=defaults.get("out_dir", "results"))
@@ -55,9 +54,7 @@ def build_parser(defaults: dict | None = None) -> argparse.ArgumentParser:
     parser.add_argument("--Amatrix_name", type=str, default=defaults.get("Amatrix_name", "A_matrix.npy"))
     parser.add_argument("--weight_name", type=str, default=defaults.get("weight_name", "weight_vec.npy"))
     parser.add_argument("--diff_name", type=str, default=defaults.get("diff_name", "diff_constraint_99590.npy"))
-    parser.add_argument("--diff2_name", type=str, default=defaults.get("diff2_name", "diff_constraint_75302.npy"))
     parser.add_argument("--grid_thresh", type=float, default=defaults.get("grid_thresh", 0.015))
-    parser.add_argument("--grid_thresh2", type=float, default=defaults.get("grid_thresh2", 0.1))
     parser.add_argument("--random_seed", type=int, default=defaults.get("random_seed", 0))
     parser.add_argument("--warm_start_dir", type=str, default=defaults.get("warm_start_dir"))
     parser.add_argument("--warm_start_file", action="append", default=defaults.get("warm_start_file", []))
@@ -70,7 +67,7 @@ def build_parser(defaults: dict | None = None) -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Parse CLI options, normalize legacy flags, and launch the optimization sweep."""
+    """Parse CLI options and launch the optimization sweep."""
     config_file = _preparse_config(argv)
     config_defaults = _load_config_file(config_file)
     parser = build_parser(config_defaults)
@@ -78,12 +75,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.nonzeros:
         parser.error("--nonzeros/-n is required")
-    if args.with_diff2:
-        print("Warning: --with_diff2 is ignored in the cleaned baseline workflow.")
-    if args.diff2_name != "diff_constraint_75302.npy":
-        print("Warning: --diff2_name is ignored in the cleaned baseline workflow.")
-    if args.grid_thresh2 != 0.1:
-        print("Warning: --grid_thresh2 is ignored in the cleaned baseline workflow.")
 
     diff_name = args.diff_name if args.with_diff else None
     config = OptimizationConfig(

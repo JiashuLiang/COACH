@@ -24,13 +24,13 @@ class ExtractDataTests(unittest.TestCase):
                 load_dataset_eval(path)
 
     def test_load_dataset_eval_requires_maintained_columns(self):
-        """Require the cleaned ``Reference`` column name instead of legacy variants."""
+        """Require the maintained ``Reference`` column name."""
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "dataset_eval.csv"
             with path.open("w", encoding="utf-8", newline="") as handle:
-                writer = csv.DictWriter(handle, fieldnames=["Reaction", "Reference Energy", "Stoichiometry"])
+                writer = csv.DictWriter(handle, fieldnames=["Reaction", "Value", "Stoichiometry"])
                 writer.writeheader()
-                writer.writerow({"Reaction": "R1", "Reference Energy": "1.0", "Stoichiometry": "1,A"})
+                writer.writerow({"Reaction": "R1", "Value": "1.0", "Stoichiometry": "1,A"})
 
             with self.assertRaisesRegex(ValueError, "missing required columns: Reference"):
                 load_dataset_eval(path)

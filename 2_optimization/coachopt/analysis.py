@@ -100,8 +100,8 @@ def analyze_run_directory(
     a_matrix = np.load(processed_dir / "A_matrix.npy")
     b_vec = np.load(processed_dir / "b_vec.npy")
     weight_vec = np.load(processed_dir / "weight_vec.npy")
-    a_matrix_dict = load_pickle(processed_dir / "A_matrix_dataset.dict")
-    b_vec_dict = load_pickle(processed_dir / "b_vec_dataset.dict")
+    a_matrix_dict = load_pickle(processed_dir / "A_matrix_dataset.pkl")
+    b_vec_dict = load_pickle(processed_dir / "b_vec_dataset.pkl")
     diff_path = processed_dir / diff_name
     diff_matrix = np.load(diff_path) if diff_path.exists() else None
 

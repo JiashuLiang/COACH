@@ -16,7 +16,7 @@ from coachopt.utils import read_csv_frame
 
 
 def synthetic_reaction(offset: float) -> dict:
-    """Create a compact synthetic reaction entry with legacy-shaped matrices."""
+    """Create a compact synthetic reaction entry with production matrix shapes."""
     fitting = np.zeros((180, 96), dtype=float)
     fitting[64] = offset + np.arange(96) * 0.01
     fitting[153] = offset * 2.0 + np.arange(96) * 0.02
@@ -37,13 +37,13 @@ def synthetic_reaction(offset: float) -> dict:
 
 
 class ProcessingTests(unittest.TestCase):
-    """Verify preprocessing outputs match the legacy artifact contract."""
+    """Verify preprocessing outputs match the current artifact contract."""
 
-    def test_build_and_save_data_preserves_legacy_outputs(self):
+    def test_build_and_save_data_writes_expected_outputs(self):
         """Write artifacts and confirm the expected filenames and array shapes."""
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-            reaction_path = root / "reaction_data.dict"
+            reaction_path = root / "reaction_data.pkl"
             dataset_eval_path = root / "dataset_eval.csv"
             weights_path = root / "training_weights.csv"
             out_dir = root / "processed"
@@ -96,8 +96,8 @@ class ProcessingTests(unittest.TestCase):
             self.assertEqual(diff_matrix.shape, (3, 289))
             self.assertTrue(np.allclose(diff_matrix[:, -1], 0.0))
             self.assertTrue(Path(outputs["diff_matrix"]).name == "diff_99590.npy")
-            self.assertTrue((out_dir / "A_matrix_dataset.dict").exists())
-            self.assertTrue((out_dir / "b_vec_dataset.dict").exists())
+            self.assertTrue((out_dir / "A_matrix_dataset.pkl").exists())
+            self.assertTrue((out_dir / "b_vec_dataset.pkl").exists())
 
 
 if __name__ == "__main__":
