@@ -34,6 +34,8 @@ This directory contains the maintained script-first COACH optimization workflow.
      --output-dir processed_data
    ```
 
+   Add `--show-largesterror` if you want the script to print the 20 largest diff names for each beta candidate.
+
 4. Run pass 2 with the selected constraints:
 
    ```bash
@@ -76,7 +78,7 @@ Preprocessing writes:
 - `A_matrix.npy`
 - `b_vec.npy`
 - `weight_vec.npy`
-- `name_list.txt`
+- `name_list_training.txt`
 - `A_matrix_dataset.pkl`
 - `b_vec_dataset.pkl`
 - `diff_99590.npy`
@@ -85,8 +87,6 @@ Preprocessing writes:
 Constraint selection writes:
 
 - `diff_constraint_99590.npy`
-- `name_list_diff_constraint_99590.txt`
-- `diff_constraint_99590.json`
 
 Optimization writes one `betas_nonzero<N>.npy` file per sparsity plus `run_config.json`.
 
@@ -107,7 +107,7 @@ Analysis writes:
 The examples above show the minimal baseline commands. [`run_mio.py`](run_mio.py) also supports these optional flags:
 
 - `--config_file`: load defaults from a JSON or YAML config file.
-  Use [`template/run_mio.yaml`](template/run_mio.yaml) as the starting template. Values in the config file act as defaults, and explicit CLI arguments override them.
+  Use [`templates/run_mio.yaml`](templates/run_mio.yaml) as the starting template. Values in the config file act as defaults, and explicit CLI arguments override them.
 - `--nonzeros`, `--nthreads`, `--repeats`, `--time_limit`, `--random_seed`, `--verbose`: control sweep size and solver runtime behavior. `--repeats` is the number of solves to run for each warm start and defaults to `1`.
 - `--input_dir`, `--out_dir`: choose where optimization reads inputs and writes outputs.
 - `--A_rows`: override the three fitting rows used to define the 289-parameter baseline.

@@ -35,6 +35,5 @@ class ExtractDataTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "missing required columns: Reference"):
                 load_dataset_eval(path)
 
-
 if __name__ == "__main__":
     unittest.main()

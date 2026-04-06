@@ -17,14 +17,25 @@ class ConstraintSelection:
     metadata: dict[str, int]
 
 
-def _top_abs_indices(values: np.ndarray, count: int) -> np.ndarray:
-    """Return indices of the ``count`` largest absolute entries."""
-    if values.size == 0:
+def _largest_abs_indices(values: np.ndarray, count: int) -> np.ndarray:
+    """Return indices for the largest absolute entries in descending order."""
+    if values.size == 0 or count <= 0:
         return np.asarray([], dtype=int)
-    count = min(count, values.size)
-    if count == values.size:
-        return np.arange(values.size, dtype=int)
-    return np.argpartition(np.abs(values), -count)[-count:]
+    return np.argsort(np.abs(values))[::-1][: min(count, values.size)]
+
+
+def print_largest_diff_names(
+    diff_matrix: np.ndarray,
+    diff_names: list[str],
+    candidates,
+    count: int = 20,
+) -> None:
+    """Print the largest absolute diff names for each beta candidate."""
+    for candidate in candidates:
+        deviations = np.asarray(diff_matrix @ candidate.coefficients, dtype=float).reshape(-1)
+        print(f"{candidate.label} largest diffs:")
+        for index in _largest_abs_indices(deviations, count):
+            print(diff_names[index])
 
 
 def select_diff_constraint_rows(
@@ -49,24 +60,18 @@ def select_diff_constraint_rows(
             raise ValueError(
                 f"Beta length {coeff.shape[0]} does not match diff matrix width {diff_matrix.shape[1]}"
             )
-        deviations = diff_matrix @ coeff
-        chosen_indices.update(_top_abs_indices(deviations, top_per_beta).tolist())
+        chosen_indices.update(_largest_abs_indices(diff_matrix @ coeff, top_per_beta).tolist())
 
-    l1_norms = np.sum(np.abs(diff_matrix), axis=1)
-    remaining_indices = np.asarray(
-        [index for index in range(diff_matrix.shape[0]) if index not in chosen_indices],
-        dtype=int,
-    )
-    if remaining_indices.size:
-        additional = remaining_indices[_top_abs_indices(l1_norms[remaining_indices], top_l1)]
-        chosen_indices.update(additional.tolist())
+    remaining_indices = np.asarray(sorted(set(range(diff_matrix.shape[0])) - chosen_indices), dtype=int)
+    if remaining_indices.size and top_l1 > 0:
+        l1_norms = np.sum(np.abs(diff_matrix[remaining_indices]), axis=1)
+        chosen_indices.update(remaining_indices[_largest_abs_indices(l1_norms, top_l1)].tolist())
 
     ordered_indices = np.asarray(sorted(chosen_indices), dtype=int)
-    selected_names = [diff_names[index] for index in ordered_indices]
     return ConstraintSelection(
         indices=ordered_indices,
         rows=diff_matrix[ordered_indices],
-        names=selected_names,
+        names=[diff_names[index] for index in ordered_indices],
         metadata={
             "candidate_count": len(betas),
             "selected_count": int(ordered_indices.size),

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 
 from coachopt.analysis import analyze_run_directory
+from coachopt.constants import DEFAULT_DIFF_MATRIX_NAME, DEFAULT_GRID_THRESHOLD
 from coachopt.utils import read_csv_frame
 
 
@@ -16,8 +17,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--processed-dir", required=True, help="Directory with A_matrix.npy and related artifacts")
     parser.add_argument("--dataset-info", help="Optional dataset_info.csv for Datatype annotations")
     parser.add_argument("--baseline-errors", help="Optional baseline error CSV for relative metrics")
-    parser.add_argument("--diff-name", default="diff_99590.npy", help="Diff matrix filename inside processed-dir")
-    parser.add_argument("--grid-threshold", type=float, default=0.015, help="Constraint threshold in kcal/mol")
+    parser.add_argument("--diff-name", default=DEFAULT_DIFF_MATRIX_NAME, help="Diff matrix filename inside processed-dir")
+    parser.add_argument("--grid-threshold", type=float, default=DEFAULT_GRID_THRESHOLD, help="Constraint threshold in kcal/mol")
     return parser
 
 

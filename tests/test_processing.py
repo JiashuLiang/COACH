@@ -11,6 +11,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "2_optimization"))
 
+from coachopt.constants import DEFAULT_A_ROWS, DEFAULT_DIFF_MATRIX_NAME, DEFAULT_GRID_KEY
 from coachopt.processing import build_and_save_data
 from coachopt.utils import read_csv_frame
 
@@ -18,16 +19,16 @@ from coachopt.utils import read_csv_frame
 def synthetic_reaction(offset: float) -> dict:
     """Create a compact synthetic reaction entry with production matrix shapes."""
     fitting = np.zeros((180, 96), dtype=float)
-    fitting[64] = offset + np.arange(96) * 0.01
-    fitting[153] = offset * 2.0 + np.arange(96) * 0.02
-    fitting[166] = offset * 3.0 + np.arange(96) * 0.03
+    fitting[DEFAULT_A_ROWS[0]] = offset + np.arange(96) * 0.01
+    fitting[DEFAULT_A_ROWS[1]] = offset * 2.0 + np.arange(96) * 0.02
+    fitting[DEFAULT_A_ROWS[2]] = offset * 3.0 + np.arange(96) * 0.03
     diff = np.zeros_like(fitting)
-    diff[64] = 0.001
-    diff[153] = 0.002
-    diff[166] = 0.003
+    diff[DEFAULT_A_ROWS[0]] = 0.001
+    diff[DEFAULT_A_ROWS[1]] = 0.002
+    diff[DEFAULT_A_ROWS[2]] = 0.003
     return {
         "Fitting": fitting,
-        "99000590": diff,
+        DEFAULT_GRID_KEY: diff,
         "Tofit": 1.0 + offset,
         "Alpha Short Range Exchange": 0.1 + offset,
         "Beta Short Range Exchange": 0.2 + offset,
@@ -87,7 +88,7 @@ class ProcessingTests(unittest.TestCase):
             a_matrix = np.load(out_dir / "A_matrix.npy")
             b_vec = np.load(out_dir / "b_vec.npy")
             weight_vec = np.load(out_dir / "weight_vec.npy")
-            diff_matrix = np.load(out_dir / "diff_99590.npy")
+            diff_matrix = np.load(out_dir / DEFAULT_DIFF_MATRIX_NAME)
 
             self.assertEqual(a_matrix.shape, (3, 289))
             self.assertEqual(b_vec.shape, (3,))
@@ -95,7 +96,7 @@ class ProcessingTests(unittest.TestCase):
             self.assertEqual(weight_vec.tolist(), [2.0, 2.0, 1.0])
             self.assertEqual(diff_matrix.shape, (3, 289))
             self.assertTrue(np.allclose(diff_matrix[:, -1], 0.0))
-            self.assertTrue(Path(outputs["diff_matrix"]).name == "diff_99590.npy")
+            self.assertTrue(Path(outputs["diff_matrix"]).name == DEFAULT_DIFF_MATRIX_NAME)
             self.assertTrue((out_dir / "A_matrix_dataset.pkl").exists())
             self.assertTrue((out_dir / "b_vec_dataset.pkl").exists())
 

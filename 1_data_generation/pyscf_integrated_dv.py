@@ -547,14 +547,14 @@ def build_grid(mol, radial, angular):
         Tuple ``(coords, weights, grid_id)``:
         - coords: 2D array of Cartesian grid coordinates.
         - weights: 1D quadrature weights.
-        - grid_id: Integer id computed as ``radial * 1_000_000 + angular``.
+        - grid_id: Integer shorthand id computed as ``int(f"{radial}{angular:03d}")``.
     """
     grids = dft.gen_grid.Grids(mol)
     grids.atom_grid = (radial, angular)
     grids.prune = None
     grids.radii_adjust = None
     grids.build(with_non0tab=False)
-    grid_id = radial * 1_000_000 + angular
+    grid_id = int(f"{radial}{angular:03d}")
     return grids.coords, grids.weights, grid_id
 
 

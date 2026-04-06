@@ -53,7 +53,7 @@ Each reaction entry stores:
 The downstream optimization pipeline assumes:
 
 - `reaction["Fitting"]` has shape `(180, 96)`
-- grid-difference entries such as `reaction["99000590"]` have the same shape
+- grid-difference entries such as `reaction["99590"]` have the same shape
 - `reaction["Tofit"]` is the target fitted by the linear model
 
 ## Reference Files

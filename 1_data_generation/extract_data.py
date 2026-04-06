@@ -10,7 +10,7 @@ import numpy as np
 
 
 SR_HF_COEF = 0.167
-FITTING_GRID_IDS = {"250000974", "500000974"}
+FITTING_GRID_IDS = {"250974", "500974"}
 ENERGY_LABEL_MAP = {
     "Total energy in the final basis set": "Total energy",
     "Nuclear Repulsion Energy": "Nuclear Repulsion Energy",

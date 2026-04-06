@@ -73,7 +73,7 @@ This prepare training and test data, including the per-dataset dictionaries used
 - `A_matrix.npy`
 - `b_vec.npy`
 - `weight_vec.npy`
-- `name_list.txt`
+- `name_list_training.txt`
 - `A_matrix_dataset.pkl`
 - `b_vec_dataset.pkl`
 - `diff_99590.npy`

@@ -7,9 +7,10 @@ import argparse
 import json
 from pathlib import Path
 
+from coachopt.constants import DEFAULT_A_ROWS, DEFAULT_GRID_THRESHOLD, DEFAULT_SELECTED_DIFF_NAME
 from coachopt.optimizer import OptimizationConfig, run_optimization_sweep
 
-CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent / "template" / "run_mio.yaml"
+CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "run_mio.yaml"
 
 
 def _load_config_file(path: str | None) -> dict:
@@ -57,12 +58,12 @@ def build_parser(defaults: dict | None = None) -> argparse.ArgumentParser:
     parser.add_argument("--verbose", action="store_true", default=defaults.get("verbose", False))
     parser.add_argument("--input_dir", type=str, default=defaults.get("input_dir", "."))
     parser.add_argument("--out_dir", type=str, default=defaults.get("out_dir", "results"))
-    parser.add_argument("--A_rows", type=int, nargs=3, default=defaults.get("A_rows", [64, 153, 166]))
+    parser.add_argument("--A_rows", type=int, nargs=3, default=defaults.get("A_rows", list(DEFAULT_A_ROWS)))
     parser.add_argument("--bvec_name", type=str, default=defaults.get("bvec_name", "b_vec.npy"))
     parser.add_argument("--Amatrix_name", type=str, default=defaults.get("Amatrix_name", "A_matrix.npy"))
     parser.add_argument("--weight_name", type=str, default=defaults.get("weight_name", "weight_vec.npy"))
-    parser.add_argument("--diff_name", type=str, default=defaults.get("diff_name", "diff_constraint_99590.npy"))
-    parser.add_argument("--grid_thresh", type=float, default=defaults.get("grid_thresh", 0.015))
+    parser.add_argument("--diff_name", type=str, default=defaults.get("diff_name", DEFAULT_SELECTED_DIFF_NAME))
+    parser.add_argument("--grid_thresh", type=float, default=defaults.get("grid_thresh", DEFAULT_GRID_THRESHOLD))
     parser.add_argument("--random_seed", type=int, default=defaults.get("random_seed", 0))
     parser.add_argument("--warm_start_dir", type=str, default=defaults.get("warm_start_dir"))
     return parser

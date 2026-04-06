@@ -12,24 +12,25 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "2_optimization"))
 
 from coachopt.analysis import analyze_run_directory
+from coachopt.constants import DEFAULT_A_ROWS, DEFAULT_DIFF_MATRIX_NAME, DEFAULT_DIFF_NAMES_NAME, DEFAULT_GRID_KEY, DEFAULT_SELECTED_DIFF_NAME
 from coachopt.select_diff_constraints import select_diff_constraint_rows
 from coachopt.processing import build_and_save_data
-from coachopt.utils import load_names, read_csv_frame, save_names, write_json
+from coachopt.utils import load_names, read_csv_frame, write_json
 
 
 def synthetic_reaction(offset: float) -> dict:
     """Create a minimal reaction payload for workflow-level integration tests."""
     fitting = np.zeros((180, 96), dtype=float)
-    fitting[64] = offset + np.arange(96) * 0.01
-    fitting[153] = offset + np.arange(96) * 0.02
-    fitting[166] = offset + np.arange(96) * 0.03
+    fitting[DEFAULT_A_ROWS[0]] = offset + np.arange(96) * 0.01
+    fitting[DEFAULT_A_ROWS[1]] = offset + np.arange(96) * 0.02
+    fitting[DEFAULT_A_ROWS[2]] = offset + np.arange(96) * 0.03
     diff = np.zeros_like(fitting)
-    diff[64] = 0.001 + offset * 0.0001
-    diff[153] = 0.002 + offset * 0.0001
-    diff[166] = 0.003 + offset * 0.0001
+    diff[DEFAULT_A_ROWS[0]] = 0.001 + offset * 0.0001
+    diff[DEFAULT_A_ROWS[1]] = 0.002 + offset * 0.0001
+    diff[DEFAULT_A_ROWS[2]] = 0.003 + offset * 0.0001
     return {
         "Fitting": fitting,
-        "99000590": diff,
+        DEFAULT_GRID_KEY: diff,
         "Tofit": 0.5 + offset,
         "Alpha Short Range Exchange": 0.1,
         "Beta Short Range Exchange": 0.2,
@@ -85,13 +86,12 @@ class WorkflowSmokeTests(unittest.TestCase):
             beta = np.zeros(a_matrix.shape[1], dtype=float)
             beta[0] = 1.0
             np.save(pass1_dir / "betas_nonzero1.npy", np.asarray([beta]))
-            write_json(pass2_dir / "run_config.json", {"nonzeros": [1], "diff_name": "diff_constraint_99590.npy"})
+            write_json(pass2_dir / "run_config.json", {"nonzeros": [1], "diff_name": DEFAULT_SELECTED_DIFF_NAME})
 
-            diff_matrix = np.load(processed_dir / "diff_99590.npy")
-            diff_names = load_names(processed_dir / "name_list_diff_99590.txt")
+            diff_matrix = np.load(processed_dir / DEFAULT_DIFF_MATRIX_NAME)
+            diff_names = load_names(processed_dir / DEFAULT_DIFF_NAMES_NAME)
             selection = select_diff_constraint_rows(diff_matrix, diff_names, [beta], top_per_beta=1, top_l1=1)
-            np.save(processed_dir / "diff_constraint_99590.npy", selection.rows)
-            save_names(processed_dir / "name_list_diff_constraint_99590.txt", selection.names)
+            np.save(processed_dir / DEFAULT_SELECTED_DIFF_NAME, selection.rows)
 
             with (processed_dir / "A_matrix_dataset.pkl").open("rb") as handle:
                 a_dict = pickle.load(handle)
@@ -104,11 +104,10 @@ class WorkflowSmokeTests(unittest.TestCase):
                 run_dir=pass1_dir,
                 processed_dir=processed_dir,
                 dataset_info={"DS1": {"Datatype": "TypeA"}, "DS2": {"Datatype": "TypeB"}},
-                diff_name="diff_constraint_99590.npy",
+                diff_name=DEFAULT_SELECTED_DIFF_NAME,
             )
 
-            self.assertTrue((processed_dir / "diff_constraint_99590.npy").exists())
-            self.assertTrue((processed_dir / "name_list_diff_constraint_99590.txt").exists())
+            self.assertTrue((processed_dir / DEFAULT_SELECTED_DIFF_NAME).exists())
             self.assertTrue((pass2_dir / "run_config.json").exists())
             self.assertTrue(Path(outputs["summary_csv"]).exists())
 

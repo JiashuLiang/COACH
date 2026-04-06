@@ -45,15 +45,6 @@ def _weights_for_dataset(weight_spec: str, count: int) -> list[float]:
     return [value] * count
 
 
-def artifact_grid_suffix(grid_key: str) -> str:
-    """Convert raw grid ids like 99000590 into artifact names like 99590."""
-    if not grid_key.isdigit() or len(grid_key) < 3:
-        return grid_key
-    prefix = grid_key[:2]
-    remainder = str(int(grid_key[2:]))
-    return f"{prefix}{remainder}"
-
-
 def _selected_training_entries(
     dataset: str,
     datapoints: str,
@@ -148,16 +139,14 @@ def build_and_save_data(
         dataset: np.asarray(values, dtype=float) for dataset, values in b_vec_dataset_rows.items()
     }
     diff_matrix = np.asarray(diff_rows, dtype=float)
-    diff_suffix = artifact_grid_suffix(diff_grid)
-
     np.save(output_dir / "A_matrix.npy", a_matrix)
     np.save(output_dir / "b_vec.npy", b_vec)
     np.save(output_dir / "weight_vec.npy", weight_vec)
-    save_names(output_dir / "name_list.txt", name_list)
+    save_names(output_dir / "name_list_training.txt", name_list)
     save_pickle(output_dir / "A_matrix_dataset.pkl", a_matrix_dataset)
     save_pickle(output_dir / "b_vec_dataset.pkl", b_vec_dataset)
-    np.save(output_dir / f"diff_{diff_suffix}.npy", diff_matrix)
-    save_names(output_dir / f"name_list_diff_{diff_suffix}.txt", diff_names)
+    np.save(output_dir / f"diff_{diff_grid}.npy", diff_matrix)
+    save_names(output_dir / f"name_list_diff_{diff_grid}.txt", diff_names)
 
     write_json(
         output_dir / "build_manifest.json",
@@ -167,7 +156,6 @@ def build_and_save_data(
             "training_rows": len(a_matrix_rows),
             "dataset_count": len(a_matrix_dataset),
             "diff_grid": diff_grid,
-            "diff_suffix": diff_suffix,
             "diff_rows": len(diff_rows),
         },
     )
@@ -176,10 +164,10 @@ def build_and_save_data(
         "A_matrix": str(output_dir / "A_matrix.npy"),
         "b_vec": str(output_dir / "b_vec.npy"),
         "weight_vec": str(output_dir / "weight_vec.npy"),
-        "name_list": str(output_dir / "name_list.txt"),
+        "name_list_training": str(output_dir / "name_list_training.txt"),
         "A_matrix_dataset": str(output_dir / "A_matrix_dataset.pkl"),
         "b_vec_dataset": str(output_dir / "b_vec_dataset.pkl"),
-        "diff_matrix": str(output_dir / f"diff_{diff_suffix}.npy"),
-        "diff_names": str(output_dir / f"name_list_diff_{diff_suffix}.txt"),
+        "diff_matrix": str(output_dir / f"diff_{diff_grid}.npy"),
+        "diff_names": str(output_dir / f"name_list_diff_{diff_grid}.txt"),
         "manifest": str(output_dir / "build_manifest.json"),
     }

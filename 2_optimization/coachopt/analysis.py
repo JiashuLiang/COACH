@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .constants import DEFAULT_GRID_THRESHOLD, HARTREE_TO_KCAL_MOL
+from .constants import DEFAULT_DIFF_MATRIX_NAME, DEFAULT_GRID_THRESHOLD, HARTREE_TO_KCAL_MOL
 from .utils import ensure_directory, load_pickle, write_csv_rows, write_json
 
 
@@ -88,7 +88,7 @@ def analyze_run_directory(
     processed_dir: str | Path,
     dataset_info: dict[str, dict[str, str]] | None = None,
     baseline_errors: dict[str, dict[str, float]] | None = None,
-    diff_name: str = "diff_99590.npy",
+    diff_name: str = DEFAULT_DIFF_MATRIX_NAME,
     grid_threshold: float = DEFAULT_GRID_THRESHOLD,
 ) -> dict[str, str]:
     """Analyze a run directory and materialize summary CSVs plus best-model artifacts."""
