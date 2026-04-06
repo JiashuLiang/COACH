@@ -114,11 +114,7 @@ python3 2_optimization/run_mio.py \
   --diff_name diff_constraint_99590.npy \
   --input_dir processed_data \
   --out_dir runs/pass2 \
-  --warm_start_files \
-    runs/pass1/betas_nonzero24.npy \
-    runs/pass1/betas_nonzero32.npy \
-    runs/pass1/betas_nonzero40.npy \
-    runs/pass1/betas_nonzero48.npy \
+  --warm_start_dir runs/pass1 \
   --A_rows 64 153 166
 ```
 

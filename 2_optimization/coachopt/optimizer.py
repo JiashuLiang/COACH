@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from itertools import product
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 
@@ -30,15 +29,6 @@ def _vector_from_pairs(pairs: list[tuple[int, float]], size: int = 289) -> np.nd
 SIMPLE_WARM_START = _vector_from_pairs([(0, 0.85), (1, 1.0), (96, 1.0), (192, 1.0), (288, 0.15)])
 
 
-def _normalize_warm_start_files(value: str | Iterable[str] | None) -> list[str]:
-    """Normalize one or many warm-start file paths into a simple list."""
-    if value is None:
-        return []
-    if isinstance(value, str):
-        return [value]
-    return [str(path) for path in value]
-
-
 def _import_gurobi():
     """Import Gurobi lazily so non-solver utilities remain usable without it."""
     try:
@@ -57,7 +47,7 @@ class OptimizationConfig:
 
     nonzeros: list[int]
     a_rows: tuple[int, int, int] = DEFAULT_A_ROWS
-    repeats: int = 3
+    repeats: int = 1
     time_limit: int = 3600
     nthreads: int = 16
     verbose: bool = False
@@ -70,11 +60,7 @@ class OptimizationConfig:
     b_vec_name: str = "b_vec.npy"
     weight_name: str = "weight_vec.npy"
     diff_name: str | None = None
-    warm_start_files: str | list[str] | None = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        """Store warm-start filenames in a consistent list form."""
-        self.warm_start_files = _normalize_warm_start_files(self.warm_start_files)
+    warm_start_dir: str | None = None
 
 
 def _load_array(input_dir: str | Path, filename: str) -> np.ndarray:
@@ -82,16 +68,27 @@ def _load_array(input_dir: str | Path, filename: str) -> np.ndarray:
     return np.load(Path(input_dir) / filename, allow_pickle=False)
 
 
-def _load_warm_start_vectors(config: OptimizationConfig) -> dict[str, np.ndarray]:
-    """Load named warm-start beta vectors keyed by source."""
+def _load_warm_start_vectors(config: OptimizationConfig, nonzeros: int) -> dict[str, np.ndarray]:
+    """Load the built-in simple seed plus the matching warm-start artifact for one sparsity."""
     vectors: dict[str, np.ndarray] = {"simple": np.asarray(SIMPLE_WARM_START, dtype=float).copy()}
+    if not config.warm_start_dir:
+        return vectors
 
-    for filename in config.warm_start_files:
-        key = filename.replace("/", "_")
-        data = np.load(filename, allow_pickle=False)
-        array = np.asarray(data, dtype=float)
-        if array.shape == (289,) or (array.ndim == 2 and array.shape[1] == 289):
-            vectors[key] = array
+    filename = Path(config.warm_start_dir) / f"betas_nonzero{nonzeros}.npy"
+    if not filename.exists():
+        return vectors
+
+    key = str(filename).replace("/", "_")
+    data = np.load(filename, allow_pickle=False)
+    array = np.asarray(data, dtype=float)
+    if array.shape == (289,):
+        vectors[key] = array
+    elif array.ndim == 2 and array.shape[1] == 289:
+        if array.shape[0] == 1:
+            vectors[key] = array[0]
+        else:
+            for idx, vector in enumerate(array):
+                vectors[f"{key}_{idx}"] = np.asarray(vector, dtype=float)
 
     return vectors
 
@@ -189,8 +186,6 @@ def run_optimization_sweep(config: OptimizationConfig) -> dict[str, str]:
     y_vec = b_vec * np.sqrt(weight_vec)
     physical_constraints = build_physical_constraints(config.a_rows)
     rng = np.random.default_rng(config.random_seed)
-    warm_start_pool = _load_warm_start_vectors(config)
-
     manifest = asdict(config)
     manifest["a_rows"] = list(config.a_rows)
     manifest["feature_count"] = int(a_matrix.shape[1])
@@ -199,44 +194,37 @@ def run_optimization_sweep(config: OptimizationConfig) -> dict[str, str]:
     write_json(output_dir / "run_config.json", manifest)
 
     for nonzeros in config.nonzeros:
+        warm_start_pool = _load_warm_start_vectors(config, nonzeros)
         candidates: list[np.ndarray] = []
-        seeds: list[np.ndarray | None] = []
-        if warm_start_pool:
-            for warm_start in warm_start_pool.values():
-                if warm_start.ndim == 1:
-                    seeds.append(warm_start)
-                else:
-                    seeds.extend(np.asarray(warm_start, dtype=float))
-        while len(seeds) < max(config.repeats, 1):
-            seeds.append(None)
-
-        for repeat_index in range(max(config.repeats, 1)):
-            seed = seeds[repeat_index]
-            if seed is not None and repeat_index > 0:
-                noise = rng.normal(scale=0.05, size=seed.shape[0])
-                seed = seed + noise
-            elif seed is None:
-                seed = rng.normal(scale=0.1, size=a_matrix.shape[1])
-            beta = _solve_single_mio(
-                x_matrix=x_matrix,
-                y_vec=y_vec,
-                nonzeros=nonzeros,
-                constraints=physical_constraints,
-                config=config,
-                diff_matrix=diff_matrix,
-                warm_start=np.asarray(seed, dtype=float),
-            )
-            candidates.append(beta)
+        score_labels: list[str] = []
+        repeat_count = max(config.repeats, 1)
+        for warm_start_key, warm_start in warm_start_pool.items():
+            for repeat_index in range(repeat_count):
+                label = warm_start_key
+                seed = np.asarray(warm_start, dtype=float)
+                if repeat_count > 1:
+                    label = f"{label}_repeat_{repeat_index}"
+                if repeat_index > 0:
+                    noise = rng.normal(scale=0.05, size=seed.shape[0])
+                    seed = seed + noise
+                beta = _solve_single_mio(
+                    x_matrix=x_matrix,
+                    y_vec=y_vec,
+                    nonzeros=nonzeros,
+                    constraints=physical_constraints,
+                    config=config,
+                    diff_matrix=diff_matrix,
+                    warm_start=seed,
+                )
+                candidates.append(beta)
+                score_labels.append(label)
 
         beta_path = output_dir / f"betas_nonzero{nonzeros}.npy"
         np.save(beta_path, np.asarray(candidates, dtype=float))
 
         scores = [
-            {
-                "candidate_index": idx,
-                "wrmse_train_kcal_mol": weighted_rmse(a_matrix, b_vec, weight_vec, candidate),
-            }
-            for idx, candidate in enumerate(candidates)
+            {"label": label, "wrmse_train_kcal_mol": weighted_rmse(a_matrix, b_vec, weight_vec, candidate)}
+            for label, candidate in zip(score_labels, candidates, strict=True)
         ]
         write_json(output_dir / f"betas_nonzero{nonzeros}.json", scores)
 

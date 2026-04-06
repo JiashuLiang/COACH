@@ -3,7 +3,7 @@
 # Any explicit CLI argument passed to run_mio.py will override the value here.
 
 nonzeros: [24, 32, 40]
-repeats: 2
+repeats: 1
 time_limit: 3600
 nthreads: 16
 verbose: true
@@ -21,7 +21,4 @@ diff_name: "diff_constraint_99590.npy"
 grid_thresh: 0.015
 
 random_seed: 0
-warm_start_files:
-  - "runs/pass1/betas_nonzero24.npy"
-  - "runs/pass1/betas_nonzero32.npy"
-  - "runs/pass1/betas_nonzero40.npy"
+warm_start_dir: "runs/pass1"

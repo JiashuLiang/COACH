@@ -43,10 +43,7 @@ This directory contains the maintained script-first COACH optimization workflow.
      --diff_name diff_constraint_99590.npy \
      --input_dir processed_data \
      --out_dir runs/pass2 \
-     --warm_start_files \
-       runs/pass1/betas_nonzero24.npy \
-       runs/pass1/betas_nonzero32.npy \
-       runs/pass1/betas_nonzero40.npy \
+     --warm_start_dir runs/pass1 \
      --A_rows 64 153 166
    ```
 
@@ -111,9 +108,9 @@ The examples above show the minimal baseline commands. [`run_mio.py`](run_mio.py
 
 - `--config_file`: load defaults from a JSON or YAML config file.
   Use [`template/run_mio.yaml`](template/run_mio.yaml) as the starting template. Values in the config file act as defaults, and explicit CLI arguments override them.
-- `--nonzeros`, `--nthreads`, `--repeats`, `--time_limit`, `--random_seed`, `--verbose`: control sweep size and solver runtime behavior.
+- `--nonzeros`, `--nthreads`, `--repeats`, `--time_limit`, `--random_seed`, `--verbose`: control sweep size and solver runtime behavior. `--repeats` is the number of solves to run for each warm start and defaults to `1`.
 - `--input_dir`, `--out_dir`: choose where optimization reads inputs and writes outputs.
 - `--A_rows`: override the three fitting rows used to define the 289-parameter baseline.
 - `--bvec_name`, `--Amatrix_name`, `--weight_name`, `--diff_name`: override input artifact filenames inside `--input_dir`.
 - `--with_diff`, `--grid_thresh`: enable diff-matrix constraints and set the threshold in kcal/mol.
-- `--warm_start_files`: load one or more extra warm-start `.npy` files after the built-in `simple` seed. In config files, this value can be a single string or a list.
+- `--warm_start_dir`: for each requested sparsity, load `betas_nonzero<N>.npy` from this directory after the built-in `simple` seed. This matches the pass-1 to pass-2 handoff when adding selected grid constraints.

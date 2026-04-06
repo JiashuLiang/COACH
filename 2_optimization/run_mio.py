@@ -51,7 +51,7 @@ def build_parser(defaults: dict | None = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--nonzeros", "-n", nargs="+", type=int, default=defaults.get("nonzeros"))
     parser.add_argument("--nthreads", "-t", type=int, default=defaults.get("nthreads", 16))
-    parser.add_argument("--repeats", type=int, default=defaults.get("repeats", 3))
+    parser.add_argument("--repeats", type=int, default=defaults.get("repeats", 1))
     parser.add_argument("--time_limit", type=int, default=defaults.get("time_limit", 3600))
     parser.add_argument("--with_diff", action="store_true", default=defaults.get("with_diff", False))
     parser.add_argument("--verbose", action="store_true", default=defaults.get("verbose", False))
@@ -64,7 +64,7 @@ def build_parser(defaults: dict | None = None) -> argparse.ArgumentParser:
     parser.add_argument("--diff_name", type=str, default=defaults.get("diff_name", "diff_constraint_99590.npy"))
     parser.add_argument("--grid_thresh", type=float, default=defaults.get("grid_thresh", 0.015))
     parser.add_argument("--random_seed", type=int, default=defaults.get("random_seed", 0))
-    parser.add_argument("--warm_start_files", nargs="+", default=defaults.get("warm_start_files", []))
+    parser.add_argument("--warm_start_dir", type=str, default=defaults.get("warm_start_dir"))
     return parser
 
 
@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         b_vec_name=args.bvec_name,
         weight_name=args.weight_name,
         diff_name=diff_name,
-        warm_start_files=args.warm_start_files,
+        warm_start_dir=args.warm_start_dir,
     )
     outputs = run_optimization_sweep(config)
     print(f"Wrote optimization outputs to {outputs['output_dir']}")
