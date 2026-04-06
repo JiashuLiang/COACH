@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from coachopt.analysis import load_beta_candidates
-from coachopt.constraints import select_diff_constraint_rows
+from coachopt.select_diff_constraints import select_diff_constraint_rows
 from coachopt.utils import load_names, save_names, write_json
 
 

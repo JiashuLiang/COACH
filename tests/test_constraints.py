@@ -8,7 +8,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "2_optimization"))
 
-from coachopt.constraints import select_diff_constraint_rows
+from coachopt.select_diff_constraints import select_diff_constraint_rows
 
 
 class ConstraintSelectionTests(unittest.TestCase):

@@ -107,6 +107,7 @@ Analysis writes:
 The examples above show the minimal baseline commands. [`run_mio.py`](run_mio.py) also supports these optional flags:
 
 - `--config_file`: load defaults from a JSON or YAML config file.
+  Use [`template/run_mio.yaml`](template/run_mio.yaml) as the starting template. Values in the config file act as defaults, and explicit CLI arguments override them.
 - `--nonzeros`, `--nthreads`, `--repeats`, `--time_limit`, `--random_seed`, `--verbose`: control sweep size and solver runtime behavior.
 - `--input_dir`, `--out_dir`: choose where optimization reads inputs and writes outputs.
 - `--A_rows`: override the three fitting rows used to define the 289-parameter baseline.

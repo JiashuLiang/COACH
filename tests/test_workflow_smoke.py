@@ -12,7 +12,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "2_optimization"))
 
 from coachopt.analysis import analyze_run_directory
-from coachopt.constraints import select_diff_constraint_rows
+from coachopt.select_diff_constraints import select_diff_constraint_rows
 from coachopt.processing import build_and_save_data
 from coachopt.utils import load_names, read_csv_frame, save_names, write_json
 

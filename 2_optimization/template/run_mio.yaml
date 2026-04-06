@@ -1,5 +1,6 @@
-
-# Configuration file for the cleaned 289-parameter COACH MIO workflow
+# Configuration file for the cleaned 289-parameter COACH MIO workflow.
+# Values in this file act as parser defaults.
+# Any explicit CLI argument passed to run_mio.py will override the value here.
 
 nonzeros: [24, 32, 40]
 repeats: 2
@@ -20,4 +21,3 @@ diff_name: "diff_constraint_99590.npy"
 grid_thresh: 0.015
 
 random_seed: 0
-

@@ -9,6 +9,8 @@ from pathlib import Path
 
 from coachopt.optimizer import OptimizationConfig, run_optimization_sweep
 
+CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent / "template" / "run_mio.yaml"
+
 
 def _load_config_file(path: str | None) -> dict:
     """Load optional JSON or YAML defaults for the optimization CLI."""
@@ -40,7 +42,13 @@ def build_parser(defaults: dict | None = None) -> argparse.ArgumentParser:
     """Build the MIO CLI parser with optional config-file defaults."""
     defaults = defaults or {}
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config_file", help="Optional JSON/YAML config file")
+    parser.add_argument(
+        "--config_file",
+        help=(
+            "Optional JSON/YAML config file used as parser defaults. "
+            f"CLI arguments override config values. Template: {CONFIG_TEMPLATE_PATH}"
+        ),
+    )
     parser.add_argument("--nonzeros", "-n", nargs="+", type=int, default=defaults.get("nonzeros"))
     parser.add_argument("--nthreads", "-t", type=int, default=defaults.get("nthreads", 16))
     parser.add_argument("--repeats", type=int, default=defaults.get("repeats", 3))
@@ -69,6 +77,8 @@ def build_parser(defaults: dict | None = None) -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     """Parse CLI options and launch the optimization sweep."""
     config_file = _preparse_config(argv)
+    # Load config-file values first so they behave exactly like parser defaults.
+    # Any explicit CLI argument passed in the final parse step overrides them.
     config_defaults = _load_config_file(config_file)
     parser = build_parser(config_defaults)
     args = parser.parse_args(argv)
