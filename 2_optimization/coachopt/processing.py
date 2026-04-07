@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 
 from .constants import (
+    ANALYSIS_DIFF_GRIDS,
     DEFAULT_A_ROWS,
-    DEFAULT_GRID_KEY,
 )
 from .utils import ensure_directory, save_names, save_pickle, write_json
 
@@ -73,14 +73,13 @@ def build_and_save_data(
     training_weight: pd.DataFrame,
     output_dir: str | Path,
     a_rows: tuple[int, ...] = DEFAULT_A_ROWS,
-    diff_grid: str = DEFAULT_GRID_KEY,
 ) -> dict[str, str]:
     """Build all preprocessing artifacts expected by the cleaned optimization pipeline."""
     reactions_by_dataset: dict[str, list[str]] = {}
     a_matrix_dataset_rows: dict[str, list[np.ndarray]] = {}
     b_vec_dataset_rows: dict[str, list[float]] = {}
-    diff_rows: list[np.ndarray] = []
-    diff_names: list[str] = []
+    diff_rows_by_grid: dict[str, list[np.ndarray]] = {grid: [] for grid in ANALYSIS_DIFF_GRIDS}
+    diff_names_by_grid: dict[str, list[str]] = {grid: [] for grid in ANALYSIS_DIFF_GRIDS}
     a_matrix_rows: list[np.ndarray] = []
     b_vec_rows: list[float] = []
     weight_rows: list[float] = []
@@ -104,13 +103,15 @@ def build_and_save_data(
             a_matrix_dataset_rows.setdefault(dataset, []).append(features)
             b_vec_dataset_rows.setdefault(dataset, []).append(target)
 
-            if diff_grid in reaction:
+            for diff_grid in ANALYSIS_DIFF_GRIDS:
+                if diff_grid not in reaction:
+                    continue
                 diff_features = np.asarray(reaction[diff_grid], dtype=float)
                 selected = diff_features[list(a_rows)].reshape(-1)
                 # The final feature is the SR-exchange scalar, which is not part of
                 # grid-difference constraints, so the diff row gets a trailing zero.
-                diff_rows.append(np.concatenate([selected, np.asarray([0.0], dtype=float)]))
-                diff_names.append(reaction_id)
+                diff_rows_by_grid[diff_grid].append(np.concatenate([selected, np.asarray([0.0], dtype=float)]))
+                diff_names_by_grid[diff_grid].append(reaction_id)
 
         if dataset not in training_rows_by_dataset:
             continue
@@ -132,21 +133,32 @@ def build_and_save_data(
     a_matrix = np.asarray(a_matrix_rows, dtype=float)
     b_vec = np.asarray(b_vec_rows, dtype=float)
     weight_vec = np.asarray(weight_rows, dtype=float)
+    feature_width = feature_count(a_rows)
     a_matrix_dataset = {
         dataset: np.asarray(values, dtype=float) for dataset, values in a_matrix_dataset_rows.items()
     }
     b_vec_dataset = {
         dataset: np.asarray(values, dtype=float) for dataset, values in b_vec_dataset_rows.items()
     }
-    diff_matrix = np.asarray(diff_rows, dtype=float)
     np.save(output_dir / "A_matrix.npy", a_matrix)
     np.save(output_dir / "b_vec.npy", b_vec)
     np.save(output_dir / "weight_vec.npy", weight_vec)
     save_names(output_dir / "name_list_training.txt", name_list)
     save_pickle(output_dir / "A_matrix_dataset.pkl", a_matrix_dataset)
     save_pickle(output_dir / "b_vec_dataset.pkl", b_vec_dataset)
-    np.save(output_dir / f"diff_{diff_grid}.npy", diff_matrix)
-    save_names(output_dir / f"name_list_diff_{diff_grid}.txt", diff_names)
+    diff_outputs: dict[str, str] = {}
+    diff_name_outputs: dict[str, str] = {}
+    for diff_grid in ANALYSIS_DIFF_GRIDS:
+        if diff_rows_by_grid[diff_grid]:
+            diff_matrix = np.asarray(diff_rows_by_grid[diff_grid], dtype=float)
+        else:
+            diff_matrix = np.empty((0, feature_width), dtype=float)
+        diff_path = output_dir / f"diff_{diff_grid}.npy"
+        diff_names_path = output_dir / f"name_list_diff_{diff_grid}.txt"
+        np.save(diff_path, diff_matrix)
+        save_names(diff_names_path, diff_names_by_grid[diff_grid])
+        diff_outputs[f"diff_matrix_{diff_grid}"] = str(diff_path)
+        diff_name_outputs[f"diff_names_{diff_grid}"] = str(diff_names_path)
 
     write_json(
         output_dir / "build_manifest.json",
@@ -155,8 +167,9 @@ def build_and_save_data(
             "feature_count": feature_count(a_rows),
             "training_rows": len(a_matrix_rows),
             "dataset_count": len(a_matrix_dataset),
-            "diff_grid": diff_grid,
-            "diff_rows": len(diff_rows),
+            "diff_rows_by_grid": {
+                diff_grid: len(diff_rows_by_grid[diff_grid]) for diff_grid in ANALYSIS_DIFF_GRIDS
+            },
         },
     )
 
@@ -167,7 +180,7 @@ def build_and_save_data(
         "name_list_training": str(output_dir / "name_list_training.txt"),
         "A_matrix_dataset": str(output_dir / "A_matrix_dataset.pkl"),
         "b_vec_dataset": str(output_dir / "b_vec_dataset.pkl"),
-        "diff_matrix": str(output_dir / f"diff_{diff_grid}.npy"),
-        "diff_names": str(output_dir / f"name_list_diff_{diff_grid}.txt"),
         "manifest": str(output_dir / "build_manifest.json"),
+        **diff_outputs,
+        **diff_name_outputs,
     }
