@@ -20,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Load optional metadata, analyze a run directory, and print artifact locations."""
+    """Load optional metadata and run the analysis writer."""
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -31,16 +31,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     standard_frame = read_csv_frame(args.standard_errors, ["Dataset", "RMSE"])
     standard_errors = standard_frame.set_index("Dataset")["RMSE"].to_dict()
-    outputs = analyze_run_directory(
+    analyze_run_directory(
         run_dir=args.run_dir,
         processed_dir=args.processed_dir,
         standard_errors=standard_errors,
         dataset_info=dataset_info,
     )
-
-    print(f"Analysis written to {outputs['analysis_dir']}")
-    print(outputs["detailed_result_csv"])
-    print(outputs["representative_scan_csv"])
     return 0
 
 

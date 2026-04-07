@@ -1,177 +1,14 @@
-"""Reusable analysis helpers for post-processing optimization runs."""
+"""Post-processing for optimization runs."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
-from .constants import ANALYSIS_DIFF_GRIDS, HARTREE_TO_KCAL_MOL
 from .utils import ensure_directory, load_pickle, write_csv_rows
 
-
-def rms(values: np.ndarray) -> float:
-    """Compute an unweighted root-mean-square value."""
-    return float(np.sqrt(np.mean(np.square(values))))
-
-
-@dataclass(frozen=True)
-class BetaCandidate:
-    """One beta vector loaded from a ``betas_nonzero*.npy`` artifact."""
-
-    label: str
-    nonzeros: int
-    candidate_index: int
-    coefficients: np.ndarray
-    source_file: Path
-
-
-def load_beta_candidates(run_dir: str | Path) -> list[BetaCandidate]:
-    """Load all beta candidates saved by the optimization sweep."""
-    candidates: list[BetaCandidate] = []
-    for path in sorted(Path(run_dir).glob("betas_nonzero*.npy")):
-        suffix = path.stem.split("betas_nonzero", 1)[1]
-        if not suffix.isdigit():
-            continue
-        nonzeros = int(suffix)
-        data = np.load(path)
-        if data.ndim == 1:
-            data = data.reshape(1, -1)
-        for idx, coeff in enumerate(np.asarray(data, dtype=float)):
-            candidates.append(
-                BetaCandidate(
-                    label=f"nz{nonzeros}_cand{idx}",
-                    nonzeros=nonzeros,
-                    candidate_index=idx,
-                    coefficients=coeff,
-                    source_file=path,
-                )
-            )
-    return candidates
-
-
-def _dataset_rmse_map(
-    coeff: np.ndarray,
-    a_matrix_dict: dict[str, np.ndarray],
-    b_vec_dict: dict[str, np.ndarray],
-) -> dict[str, float]:
-    """Compute per-dataset RMSE values for one beta candidate."""
-    return {
-        dataset: rms(np.asarray(b_vec_dict[dataset]) - np.asarray(a_matrix_dict[dataset]) @ coeff) * HARTREE_TO_KCAL_MOL
-        for dataset in sorted(a_matrix_dict)
-    }
-
-
-def _load_diff_matrices(processed_dir: Path) -> dict[str, np.ndarray]:
-    """Load all required analysis diff matrices from the processed-data directory."""
-    matrices: dict[str, np.ndarray] = {}
-    for diff_grid in ANALYSIS_DIFF_GRIDS:
-        diff_path = processed_dir / f"diff_{diff_grid}.npy"
-        if not diff_path.exists():
-            raise ValueError(f"Missing required diff matrix: {diff_path}")
-        matrices[diff_grid] = np.load(diff_path)
-    return matrices
-
-
-def _validate_standard_errors(
-    standard_errors: dict[str, float],
-    dataset_names: list[str],
-) -> None:
-    """Check that standard errors cover every analyzed dataset and are nonzero."""
-    missing = [dataset for dataset in dataset_names if dataset not in standard_errors]
-    if missing:
-        raise ValueError(
-            "standard_errors is missing datasets: " + ", ".join(missing)
-        )
-
-    zero_values = [dataset for dataset in dataset_names if standard_errors[dataset] == 0.0]
-    if zero_values:
-        raise ValueError(
-            "standard_errors contains zero RMSE values for datasets: " + ", ".join(zero_values)
-        )
-
-
-def _datatype_groups(
-    dataset_info: dict[str, dict[str, str]] | None,
-    dataset_names: list[str],
-) -> list[tuple[str, list[str]]]:
-    """Collect datasets grouped by Datatype in a stable order."""
-    if not dataset_info:
-        return []
-
-    datasets_by_datatype: dict[str, list[str]] = {}
-    for dataset in dataset_names:
-        datatype = dataset_info.get(dataset, {}).get("Datatype", "").strip()
-        if datatype:
-            datasets_by_datatype.setdefault(datatype, []).append(dataset)
-    return [(datatype, datasets_by_datatype[datatype]) for datatype in sorted(datasets_by_datatype)]
-
-
-def _grid_stats_by_label(coeff: np.ndarray, diff_matrices: dict[str, np.ndarray]) -> dict[str, float | str]:
-    """Compute the requested grid-difference statistics for one beta candidate."""
-    stats: dict[str, float | str] = {}
-
-    diff99590 = np.abs(diff_matrices["99590"] @ coeff) * HARTREE_TO_KCAL_MOL
-    stats["99590 max diff"] = float(np.max(diff99590, initial=0.0))
-    stats["99590 Percentage diff > 0.015 kcal/mol"] = "{:.2f}%".format(
-        np.sum(diff99590 > 0.015) / len(diff99590) * 100 if len(diff99590) else 0.0
-    )
-    stats["99590 count diff > 0.015 kcal/mol"] = int(np.sum(diff99590 > 0.015))
-    stats["99590 count diff > 0.1 kcal/mol"] = int(np.sum(diff99590 > 0.1))
-    stats["99590 count diff > 0.5 kcal/mol"] = int(np.sum(diff99590 > 0.5))
-
-    diff75302 = np.abs(diff_matrices["75302"] @ coeff) * HARTREE_TO_KCAL_MOL
-    stats["75302 max diff"] = float(np.max(diff75302, initial=0.0))
-    stats["75302 median diff"] = float(np.median(diff75302)) if len(diff75302) else 0.0
-    stats["75302 Percentage diff > 0.015 kcal/mol"] = "{:.2f}%".format(
-        np.sum(diff75302 > 0.015) / len(diff75302) * 100 if len(diff75302) else 0.0
-    )
-    stats["75302 count diff > 0.015 kcal/mol"] = int(np.sum(diff75302 > 0.015))
-    stats["75302 count diff > 0.1 kcal/mol"] = int(np.sum(diff75302 > 0.1))
-    stats["75302 count diff > 0.5 kcal/mol"] = int(np.sum(diff75302 > 0.5))
-
-    return stats
-
-
-def _metric_row_order(
-    datatype_groups: list[tuple[str, list[str]]],
-    dataset_names: list[str],
-) -> list[str]:
-    """Return the fixed row order shared by both analysis CSVs."""
-    datatype_rows = [f"{datatype} mean relative error" for datatype, _ in datatype_groups]
-    return [
-        "mean relative error",
-        "median relative error",
-        *datatype_rows,
-        "99590 max diff",
-        "99590 Percentage diff > 0.015 kcal/mol",
-        "99590 count diff > 0.015 kcal/mol",
-        "99590 count diff > 0.1 kcal/mol",
-        "99590 count diff > 0.5 kcal/mol",
-        "75302 max diff",
-        "75302 median diff",
-        "75302 Percentage diff > 0.015 kcal/mol",
-        "75302 count diff > 0.015 kcal/mol",
-        "75302 count diff > 0.1 kcal/mol",
-        "75302 count diff > 0.5 kcal/mol",
-        *dataset_names,
-    ]
-
-
-def _rows_for_columns(
-    metric_order: list[str],
-    candidate_labels: list[str],
-    metrics_by_candidate: dict[str, dict[str, float | str]],
-) -> list[dict[str, float | str]]:
-    """Transpose candidate metric dictionaries into CSV row dictionaries."""
-    rows: list[dict[str, float | str]] = []
-    for metric_name in metric_order:
-        row: dict[str, float | str] = {"Metric": metric_name}
-        for candidate_label in candidate_labels:
-            row[candidate_label] = metrics_by_candidate[candidate_label].get(metric_name, "")
-        rows.append(row)
-    return rows
+HARTREE_TO_KCAL_MOL = 627.50947406
 
 
 def analyze_run_directory(
@@ -179,77 +16,181 @@ def analyze_run_directory(
     processed_dir: str | Path,
     standard_errors: dict[str, float],
     dataset_info: dict[str, dict[str, str]] | None = None,
-) -> dict[str, str]:
-    """Analyze a run directory and write detailed and representative scan CSVs."""
+) -> None:
+    """Analyze one run directory and write the requested CSV summaries."""
     run_dir = Path(run_dir)
     processed_dir = Path(processed_dir)
-    analysis_dir = ensure_directory(run_dir / "analysis")
+    ensure_directory(run_dir)
 
     a_matrix_dict = load_pickle(processed_dir / "A_matrix_dataset.pkl")
     b_vec_dict = load_pickle(processed_dir / "b_vec_dataset.pkl")
-    diff_matrices = _load_diff_matrices(processed_dir)
 
-    candidates = load_beta_candidates(run_dir)
-    if not candidates:
-        raise ValueError(f"No beta files were found in {run_dir}")
+    diff99590_path = processed_dir / "diff_99590.npy"
+    diff75302_path = processed_dir / "diff_75302.npy"
+    feature_count = next(iter(a_matrix_dict.values())).shape[1]
 
-    dataset_names = sorted(a_matrix_dict)
-    _validate_standard_errors(standard_errors, dataset_names)
-    datatype_groups = _datatype_groups(dataset_info, dataset_names)
-    metric_order = _metric_row_order(datatype_groups, dataset_names)
+    try:
+        diff99590_matrix = np.load(diff99590_path) if diff99590_path.exists() else None
+    except Exception:
+        diff99590_matrix = None
+    try:
+        diff75302_matrix = np.load(diff75302_path) if diff75302_path.exists() else None
+    except Exception:
+        diff75302_matrix = None
+    if diff99590_matrix is not None and (
+        diff99590_matrix.ndim != 2 or diff99590_matrix.shape[1] != feature_count
+    ):
+        diff99590_matrix = None
+    if diff75302_matrix is not None and (
+        diff75302_matrix.ndim != 2 or diff75302_matrix.shape[1] != feature_count
+    ):
+        diff75302_matrix = None
 
-    metrics_by_candidate: dict[str, dict[str, float | str]] = {}
+    if dataset_info:
+        # Follow the dataset order from dataset_info and keep only datasets that
+        # are available in every input needed for relative-error analysis.
+        dataset_names = [
+            dataset
+            for dataset in dataset_info
+            if dataset in a_matrix_dict and dataset in b_vec_dict and dataset in standard_errors and standard_errors[dataset] != 0.0
+        ]
+    else:
+        dataset_names = [
+            dataset
+            for dataset in sorted(a_matrix_dict)
+            if dataset in b_vec_dict and dataset in standard_errors and standard_errors[dataset] != 0.0
+        ]
+
+    if not dataset_names:
+        raise ValueError("No matching datasets were found across processed data and standard_errors")
+
+    datatype_groups: dict[str, list[str]] = {}
+    if dataset_info:
+        for dataset in dataset_names:
+            datatype = dataset_info.get(dataset, {}).get("Datatype", "").strip()
+            if datatype:
+                datatype_groups.setdefault(datatype, []).append(dataset)
+
+    metric_order = [
+        "mean relative error",
+        "median relative error",
+        *[f"{datatype} mean relative error" for datatype in sorted(datatype_groups)],
+    ]
+    if diff99590_matrix is not None:
+        metric_order.extend([
+            "99590 max diff",
+            "99590 Percentage diff > 0.015 kcal/mol",
+            "99590 count diff > 0.015 kcal/mol",
+            "99590 count diff > 0.1 kcal/mol",
+            "99590 count diff > 0.5 kcal/mol",
+        ])
+    if diff75302_matrix is not None:
+        metric_order.extend([
+            "75302 max diff",
+            "75302 median diff",
+            "75302 Percentage diff > 0.015 kcal/mol",
+            "75302 count diff > 0.015 kcal/mol",
+            "75302 count diff > 0.1 kcal/mol",
+            "75302 count diff > 0.5 kcal/mol",
+        ])
+    metric_order.extend(dataset_names)
+
+    detailed_labels: list[str] = []
+    metrics_by_label: dict[str, dict[str, float | str]] = {}
     best_by_nonzero: dict[int, tuple[float, float, str]] = {}
 
-    for candidate in candidates:
-        dataset_rmse = _dataset_rmse_map(candidate.coefficients, a_matrix_dict, b_vec_dict)
-        relative_errors = {
-            dataset: dataset_rmse[dataset] / standard_errors[dataset]
-            for dataset in dataset_names
-        }
+    for beta_path in sorted(run_dir.glob("betas_nonzero*.npy")):
+        suffix = beta_path.stem.split("betas_nonzero", 1)[1]
+        if not suffix.isdigit():
+            continue
 
-        metrics: dict[str, float | str] = {
-            "mean relative error": float(np.mean(list(relative_errors.values()))),
-            "median relative error": float(np.median(list(relative_errors.values()))),
-        }
-        for datatype, datatype_datasets in datatype_groups:
-            metrics[f"{datatype} mean relative error"] = float(
-                np.mean([relative_errors[dataset] for dataset in datatype_datasets])
+        nonzeros = int(suffix)
+        beta_array = np.load(beta_path)
+        if beta_array.ndim == 1:
+            beta_array = beta_array.reshape(1, -1)
+
+        for candidate_index, coefficients in enumerate(np.asarray(beta_array, dtype=float)):
+            label = f"{beta_path.stem}_cand{candidate_index}"
+            detailed_labels.append(label)
+
+            relative_errors: dict[str, float] = {}
+            for dataset in dataset_names:
+                residual = np.asarray(b_vec_dict[dataset]) - np.asarray(a_matrix_dict[dataset]) @ coefficients
+                dataset_rmse = float(np.sqrt(np.mean(np.square(residual))) * HARTREE_TO_KCAL_MOL)
+                relative_errors[dataset] = dataset_rmse / standard_errors[dataset]
+
+            metrics: dict[str, float | str] = {
+                "mean relative error": float(np.mean(list(relative_errors.values()))),
+                "median relative error": float(np.median(list(relative_errors.values()))),
+            }
+            for datatype in sorted(datatype_groups):
+                metrics[f"{datatype} mean relative error"] = float(
+                    np.mean([relative_errors[dataset] for dataset in datatype_groups[datatype]])
+                )
+
+            if diff99590_matrix is not None:
+                diff99590 = np.abs(diff99590_matrix @ coefficients) * HARTREE_TO_KCAL_MOL
+                metrics["99590 max diff"] = float(np.max(diff99590, initial=0.0))
+                metrics["99590 Percentage diff > 0.015 kcal/mol"] = "{:.2f}%".format(
+                    np.sum(diff99590 > 0.015) / len(diff99590) * 100 if len(diff99590) else 0.0
+                )
+                metrics["99590 count diff > 0.015 kcal/mol"] = int(np.sum(diff99590 > 0.015))
+                metrics["99590 count diff > 0.1 kcal/mol"] = int(np.sum(diff99590 > 0.1))
+                metrics["99590 count diff > 0.5 kcal/mol"] = int(np.sum(diff99590 > 0.5))
+
+            if diff75302_matrix is not None:
+                diff75302 = np.abs(diff75302_matrix @ coefficients) * HARTREE_TO_KCAL_MOL
+                metrics["75302 max diff"] = float(np.max(diff75302, initial=0.0))
+                metrics["75302 median diff"] = float(np.median(diff75302)) if len(diff75302) else 0.0
+                metrics["75302 Percentage diff > 0.015 kcal/mol"] = "{:.2f}%".format(
+                    np.sum(diff75302 > 0.015) / len(diff75302) * 100 if len(diff75302) else 0.0
+                )
+                metrics["75302 count diff > 0.015 kcal/mol"] = int(np.sum(diff75302 > 0.015))
+                metrics["75302 count diff > 0.1 kcal/mol"] = int(np.sum(diff75302 > 0.1))
+                metrics["75302 count diff > 0.5 kcal/mol"] = int(np.sum(diff75302 > 0.5))
+
+            # The final block of rows is the per-dataset relative error table.
+            metrics.update(relative_errors)
+            metrics_by_label[label] = metrics
+
+            # Representative scan keeps the beta with the lowest overall mean relative error
+            # for each sparsity level, with median relative error as the tie-breaker.
+            score = (
+                float(metrics["mean relative error"]),
+                float(metrics["median relative error"]),
+                label,
             )
-        metrics.update(_grid_stats_by_label(candidate.coefficients, diff_matrices))
-        metrics.update(relative_errors)
-        metrics_by_candidate[candidate.label] = metrics
+            current_best = best_by_nonzero.get(nonzeros)
+            if current_best is None or score < current_best:
+                best_by_nonzero[nonzeros] = score
 
-        score = (
-            float(metrics["mean relative error"]),
-            float(metrics["median relative error"]),
-            candidate.label,
-        )
-        current_best = best_by_nonzero.get(candidate.nonzeros)
-        if current_best is None or score < current_best:
-            best_by_nonzero[candidate.nonzeros] = score
+    if not detailed_labels:
+        raise ValueError(f"No beta files were found in {run_dir}")
 
-    detailed_labels = [candidate.label for candidate in candidates]
-    representative_labels = [
-        best_by_nonzero[nonzeros][2] for nonzeros in sorted(best_by_nonzero)
-    ]
+    # The CSVs are written in transposed form: one metric per row and one beta per column.
+    detailed_rows: list[dict[str, float | str]] = []
+    for metric_name in metric_order:
+        row: dict[str, float | str] = {"Metric": metric_name}
+        for label in detailed_labels:
+            row[label] = metrics_by_label[label].get(metric_name, "")
+        detailed_rows.append(row)
+    detailed_result_csv = run_dir / "detailed_result.csv"
+    write_csv_rows(detailed_result_csv, ["Metric"] + detailed_labels, detailed_rows)
 
-    fieldnames = ["Metric"] + detailed_labels
+    representative_labels = [best_by_nonzero[nonzeros][2] for nonzeros in sorted(best_by_nonzero)]
+    representative_rows: list[dict[str, float | str]] = []
+    for metric_name in metric_order:
+        row = {"Metric": metric_name}
+        for label in representative_labels:
+            row[label] = metrics_by_label[label].get(metric_name, "")
+        representative_rows.append(row)
+    representative_scan_csv = run_dir / "representative_scan.csv"
     write_csv_rows(
-        analysis_dir / "detailed_result.csv",
-        fieldnames,
-        _rows_for_columns(metric_order, detailed_labels, metrics_by_candidate),
+        representative_scan_csv,
+        ["Metric"] + representative_labels,
+        representative_rows,
     )
 
-    representative_fieldnames = ["Metric"] + representative_labels
-    write_csv_rows(
-        analysis_dir / "representative_scan.csv",
-        representative_fieldnames,
-        _rows_for_columns(metric_order, representative_labels, metrics_by_candidate),
-    )
-
-    return {
-        "analysis_dir": str(analysis_dir),
-        "detailed_result_csv": str(analysis_dir / "detailed_result.csv"),
-        "representative_scan_csv": str(analysis_dir / "representative_scan.csv"),
-    }
+    print(f"Analysis written to {run_dir}")
+    print(detailed_result_csv)
+    print(representative_scan_csv)
