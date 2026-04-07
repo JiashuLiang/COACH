@@ -1,6 +1,6 @@
 # 2_optimization
 
-This directory contains the maintained script-first COACH optimization workflow.
+This directory contains the maintained script-first COACH workflow for preprocessing, optimization, constraint selection, and analysis.
 
 ## Workflow
 
@@ -8,17 +8,19 @@ This directory contains the maintained script-first COACH optimization workflow.
 
    ```bash
    python3 2_optimization/build_data.py \
-     --reaction-data processed/raw/reaction_data.pkl \
+     --reaction-data processed_data/reaction_data.pkl \
      --dataset-eval path/to/dataset_eval.csv \
      --training-weights path/to/training_weights.csv \
      --output-dir processed_data
    ```
 
+   This prepares training and test data, including the per-dataset dictionaries used in downstream analysis and testing.
+
 2. Run pass 1 without grid constraints:
 
    ```bash
    python3 2_optimization/run_mio.py \
-     -n 24 32 40 \
+     -n 24 32 40 48 \
      --input_dir processed_data \
      --out_dir runs/pass1 \
      --A_rows 64 153 166
@@ -34,13 +36,19 @@ This directory contains the maintained script-first COACH optimization workflow.
      --output-dir processed_data
    ```
 
+   This implements the manuscript rule:
+
+   - top 100 rows per candidate by `|(A - A') c|`
+   - plus top 200 rows globally by row `L1` norm
+   - then deduplicate and save the selected subset
+
    Add `--show-largesterror` if you want the script to print the 20 largest diff names for each beta candidate.
 
 4. Run pass 2 with the selected constraints:
 
    ```bash
    python3 2_optimization/run_mio.py \
-     -n 24 32 40 \
+     -n 24 32 40 48 \
      --with_diff \
      --diff_name diff_constraint_99590.npy \
      --input_dir processed_data \
@@ -59,9 +67,18 @@ This directory contains the maintained script-first COACH optimization workflow.
      --dataset-info path/to/dataset_info.csv
    ```
 
-## Metadata Contract
+   If `processed_data` contains both `diff_99590.npy` and `diff_75302.npy`, the analysis tables include metrics for both grids.
 
-Start from the reference files in [`templates/`](templates) and populate them with your project data.
+## Metadata Setup
+
+Start from the reference files in [`templates/`](templates) and populate them with your project data:
+
+- [`templates/dataset_eval.csv`](templates/dataset_eval.csv)
+- [`templates/training_weights.csv`](templates/training_weights.csv)
+- [`templates/Standard_errors.csv`](templates/Standard_errors.csv)
+- [`templates/dataset_info.csv`](templates/dataset_info.csv)
+
+`analyze_results.py` requires a standard-error CSV with at least `Dataset` and `RMSE` columns. It reads `dataset_info.csv` directly using the shipped `Name` and `Datatype` columns.
 
 - `dataset_eval.csv`
   - Required columns: `Reaction,Dataset,Reference,Stoichiometry`

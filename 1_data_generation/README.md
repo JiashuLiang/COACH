@@ -17,7 +17,12 @@ This directory contains the maintained PySCF-side data-generation and extraction
 
 ## Expected Inputs
 
-`extract_data.py` expects:
+Step 1 expects either:
+
+- a single molecule configured directly inside `pyscf_integrated_dv.py`
+- or one `.xyz` file per species when using the maintained CLI (`--xyz` or `--xyz-dir`)
+
+Step 2 (`extract_data.py`) expects:
 
 - one `.txt` file per species under `--input-data-dir`
 - a populated CSV `dataset_eval` file describing reactions and stoichiometries
@@ -27,11 +32,33 @@ The maintained interface is CSV-only and expects `Reaction`, `Reference`, and `S
 
 ## Usage
 
+### 1. Generate PySCF molecule outputs
+
+Adapt [`pyscf_integrated_dv.py`](pyscf_integrated_dv.py) to your molecules, basis sets, grids, and batch logic, or point it at a directory of XYZ files. It should produce one text file per species containing the energy terms and integratedDV blocks expected by `extract_data.py`.
+
+Batch XYZ example:
+
+```bash
+python3 1_data_generation/pyscf_integrated_dv.py \
+  --xyz-dir path/to/xyzfiles \
+  --output-dir path/to/pyscf_outputs
+```
+
+Single XYZ example:
+
+```bash
+python3 1_data_generation/pyscf_integrated_dv.py \
+  --xyz path/to/species.xyz \
+  --output-txt path/to/species.txt
+```
+
+### 2. Extract reaction data
+
 ```bash
 python3 1_data_generation/extract_data.py \
   --input-data-dir path/to/pyscf_outputs \
   --dataset-eval path/to/dataset_eval.csv \
-  --output-dir processed/raw
+  --output-dir processed_data
 ```
 
 The script writes:
@@ -40,6 +67,8 @@ The script writes:
 - `reaction_data.pkl`
 - `failed_files.log` when parsing failures occur
 - `failed_reactions.log` when a reaction cannot be assembled from the parsed species
+
+If you keep step-2 outputs in the same directory used by preprocessing, step 3 in [`../2_optimization/README.md`](../2_optimization/README.md) can consume `reaction_data.pkl` in place.
 
 ## `reaction_data.pkl` Structure
 
@@ -53,7 +82,7 @@ Each reaction entry stores:
 The downstream optimization pipeline assumes:
 
 - `reaction["Fitting"]` has shape `(180, 96)`
-- grid-difference entries such as `reaction["99590"]` have the same shape
+- grid-difference entries such as `reaction["99590"]` have the same shape, which contains the difference between '99590' and 'Tofit'
 - `reaction["Tofit"]` is the target fitted by the linear model
 
 ## Reference Files
