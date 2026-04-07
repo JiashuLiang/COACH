@@ -11,7 +11,7 @@ from .constants import (
     ANALYSIS_DIFF_GRIDS,
     DEFAULT_A_ROWS,
 )
-from .utils import ensure_directory, save_names, save_pickle, write_json
+from .utils import ensure_directory, save_names, save_pickle
 
 
 def feature_count(a_rows: tuple[int, ...]) -> int:
@@ -73,7 +73,7 @@ def build_and_save_data(
     training_weight: pd.DataFrame,
     output_dir: str | Path,
     a_rows: tuple[int, ...] = DEFAULT_A_ROWS,
-) -> dict[str, str]:
+) -> dict[str, object]:
     """Build all preprocessing artifacts expected by the cleaned optimization pipeline."""
     reactions_by_dataset: dict[str, list[str]] = {}
     a_matrix_dataset_rows: dict[str, list[np.ndarray]] = {}
@@ -160,19 +160,6 @@ def build_and_save_data(
         diff_outputs[f"diff_matrix_{diff_grid}"] = str(diff_path)
         diff_name_outputs[f"diff_names_{diff_grid}"] = str(diff_names_path)
 
-    write_json(
-        output_dir / "build_manifest.json",
-        {
-            "a_rows": list(a_rows),
-            "feature_count": feature_count(a_rows),
-            "training_rows": len(a_matrix_rows),
-            "dataset_count": len(a_matrix_dataset),
-            "diff_rows_by_grid": {
-                diff_grid: len(diff_rows_by_grid[diff_grid]) for diff_grid in ANALYSIS_DIFF_GRIDS
-            },
-        },
-    )
-
     return {
         "A_matrix": str(output_dir / "A_matrix.npy"),
         "b_vec": str(output_dir / "b_vec.npy"),
@@ -180,7 +167,13 @@ def build_and_save_data(
         "name_list_training": str(output_dir / "name_list_training.txt"),
         "A_matrix_dataset": str(output_dir / "A_matrix_dataset.pkl"),
         "b_vec_dataset": str(output_dir / "b_vec_dataset.pkl"),
-        "manifest": str(output_dir / "build_manifest.json"),
+        "a_rows": list(a_rows),
+        "feature_count": feature_count(a_rows),
+        "training_rows": len(a_matrix_rows),
+        "dataset_count": len(a_matrix_dataset),
+        "diff_rows_by_grid": {
+            diff_grid: len(diff_rows_by_grid[diff_grid]) for diff_grid in ANALYSIS_DIFF_GRIDS
+        },
         **diff_outputs,
         **diff_name_outputs,
     }

@@ -28,13 +28,16 @@ The maintained baseline pipeline is:
 
 ## Metadata Setup
 
-Project-specific metadata files are expected as CSVs. Start from the header templates in [`2_optimization/templates/`](2_optimization/templates/):
+Project-specific metadata files are expected as CSVs. Start from the reference files in [`2_optimization/templates/`](2_optimization/templates/):
 
 - [`2_optimization/templates/dataset_eval.csv`](2_optimization/templates/dataset_eval.csv)
 - [`2_optimization/templates/training_weights.csv`](2_optimization/templates/training_weights.csv)
+- [`2_optimization/templates/Standard_errors.csv`](2_optimization/templates/Standard_errors.csv)
 - [`2_optimization/templates/dataset_info.csv`](2_optimization/templates/dataset_info.csv)
 
-Populate copies of those templates with your actual reactions, dataset assignments, and weights before running the workflow.
+Populate copies of `dataset_eval.csv` and `training_weights.csv` with your actual reactions, dataset assignments, and weights before running the workflow. `analyze_results.py` also requires a standard-error CSV with at least `Dataset` and `RMSE` columns.
+
+`analyze_results.py` now reads `dataset_info.csv` directly using the `Name` and `Datatype` columns from the shipped reference file.
 
 ## End-to-End Example
 
@@ -68,7 +71,7 @@ python3 2_optimization/build_data.py \
   --output-dir processed_data
 ```
 
-This prepare training and test data, including the per-dataset dictionaries used in downstream analysis and testing:
+This prepares training and test data, including the per-dataset dictionaries used in downstream analysis and testing:
 
 - `A_matrix.npy`
 - `b_vec.npy`
@@ -78,6 +81,8 @@ This prepare training and test data, including the per-dataset dictionaries used
 - `b_vec_dataset.pkl`
 - `diff_99590.npy`
 - `name_list_diff_99590.txt`
+- `diff_75302.npy`
+- `name_list_diff_75302.txt`
 
 ### 4. Pass 1 optimization
 
@@ -124,10 +129,16 @@ python3 2_optimization/run_mio.py \
 python3 2_optimization/analyze_results.py \
   --run-dir runs/pass2 \
   --processed-dir processed_data \
+  --standard-errors path/to/Standard_errors.csv \
   --dataset-info path/to/dataset_info.csv
 ```
 
-Analysis writes summary CSVs under `runs/pass2/analysis/` and selected coefficient files under `runs/pass2/best_models/`.
+Analysis writes:
+
+- `runs/pass2/detailed_result.csv`
+- `runs/pass2/representative_scan.csv`
+
+If `processed_data` contains both `diff_99590.npy` and `diff_75302.npy`, the analysis tables include metrics for both grids.
 
 ## Directory Guide
 

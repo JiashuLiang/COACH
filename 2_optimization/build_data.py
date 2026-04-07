@@ -52,8 +52,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"A matrix: {outputs['A_matrix']}")
     print(f"b vector: {outputs['b_vec']}")
     print(f"weights: {outputs['weight_vec']}")
+    print(f"a_rows: {outputs['a_rows']}")
+    print(f"feature count: {outputs['feature_count']}")
+    print(f"training rows: {outputs['training_rows']}")
+    print(f"dataset count: {outputs['dataset_count']}")
     for diff_grid in ANALYSIS_DIFF_GRIDS:
         print(f"diff matrix {diff_grid}: {outputs[f'diff_matrix_{diff_grid}']}")
+        print(f"diff rows {diff_grid}: {outputs['diff_rows_by_grid'][diff_grid]}")
     return 0
 
 

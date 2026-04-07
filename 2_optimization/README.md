@@ -55,12 +55,13 @@ This directory contains the maintained script-first COACH optimization workflow.
    python3 2_optimization/analyze_results.py \
      --run-dir runs/pass2 \
      --processed-dir processed_data \
+     --standard-errors path/to/Standard_errors.csv \
      --dataset-info path/to/dataset_info.csv
    ```
 
 ## Metadata Contract
 
-Start from the header templates in [`templates/`](templates) and populate them with your project data.
+Start from the reference files in [`templates/`](templates) and populate them with your project data.
 
 - `dataset_eval.csv`
   - Required columns: `Reaction,Dataset,Reference,Stoichiometry`
@@ -68,8 +69,12 @@ Start from the header templates in [`templates/`](templates) and populate them w
   - Required columns: `Dataset,datapoints,weights`
   - `datapoints` supports `All` or a comma-separated reaction list.
   - `weights` supports a numeric value, `Shrink`, or `Shrink2`.
+- `Standard_errors.csv`
+  - Required columns for `analyze_results.py`: `Dataset,RMSE`
+  - Extra columns such as `Metric` and `MAE` are ignored by the CLI.
 - `dataset_info.csv`
-  - Required columns: `Dataset,Datatype`
+  - `analyze_results.py` reads `Name` and `Datatype` from the shipped reference table.
+  - Extra columns such as `Datatype_Short` and `Description` are ignored by the CLI.
 
 ## Outputs
 
@@ -83,6 +88,8 @@ Preprocessing writes:
 - `b_vec_dataset.pkl`
 - `diff_99590.npy`
 - `name_list_diff_99590.txt`
+- `diff_75302.npy`
+- `name_list_diff_75302.txt`
 
 Constraint selection writes:
 
@@ -92,14 +99,13 @@ Optimization writes one `betas_nonzero<N>.npy` file per sparsity plus `run_confi
 
 Analysis writes:
 
-- `analysis/summary.csv`
-- `analysis/best_by_nonzeros.csv`
-- `analysis/dataset_rmse.csv`
-- `best_models/best_overall.npy`
+- `detailed_result.csv`
+- `representative_scan.csv`
 
 ## Notes
 
 - The cleaned baseline workflow is the manuscript baseline only: 289 parameters, `A_rows = [64, 153, 166]`, and one grid-sensitive second pass against the 99,590 grid.
+- Preprocessing now writes diff matrices for both analysis grids (`99590` and `75302`) when those keys are present in `reaction_data.pkl`.
 - Gurobi is required only for optimization. Preprocessing, constraint selection, and most analysis utilities do not require it.
 
 ## `run_mio.py` Options

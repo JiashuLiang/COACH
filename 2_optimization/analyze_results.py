@@ -25,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     dataset_info = (
-        read_csv_frame(args.dataset_info, ["Dataset", "Datatype"]).set_index("Dataset").to_dict(orient="index")
+        read_csv_frame(args.dataset_info, ["Name", "Datatype"]).set_index("Name").to_dict(orient="index")
         if args.dataset_info
         else None
     )
