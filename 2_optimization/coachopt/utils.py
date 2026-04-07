@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import pickle
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -45,14 +44,6 @@ def read_csv_frame(path: str | Path, required_columns: list[str] | None = None) 
     if missing:
         raise ValueError(f"{path}: missing required columns: {', '.join(missing)}")
     return frame
-
-
-def write_csv_rows(path: str | Path, fieldnames: list[str], rows: Iterable[dict]) -> None:
-    """Write row dictionaries through ``pandas`` to preserve column order."""
-    frame = pd.DataFrame(list(rows), columns=fieldnames)
-    frame.to_csv(Path(path), index=False)
-
-
 def save_names(path: str | Path, values: list[str]) -> None:
     """Persist a list of names as one UTF-8 line per entry."""
     text = "\n".join(values)

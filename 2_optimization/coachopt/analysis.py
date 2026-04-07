@@ -5,8 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
-from .utils import ensure_directory, load_pickle, write_csv_rows
+from .utils import ensure_directory, load_pickle
 
 HARTREE_TO_KCAL_MOL = 627.50947406
 
@@ -29,40 +30,45 @@ def analyze_run_directory(
     diff75302_path = processed_dir / "diff_75302.npy"
     feature_count = next(iter(a_matrix_dict.values())).shape[1]
 
+    # Attempt to load the diff matrices. If not available or not the expected shape, we'll skip those metrics.
+    diff99590_matrix = None
+    diff75302_matrix = None
     try:
-        diff99590_matrix = np.load(diff99590_path) if diff99590_path.exists() else None
+        if diff99590_path.exists():
+            diff99590_matrix = np.load(diff99590_path)
+            if diff99590_matrix.ndim != 2 or diff99590_matrix.shape[1] != feature_count:
+                diff99590_matrix = None
     except Exception:
         diff99590_matrix = None
     try:
-        diff75302_matrix = np.load(diff75302_path) if diff75302_path.exists() else None
+        if diff75302_path.exists():
+            diff75302_matrix = np.load(diff75302_path)
+            if diff75302_matrix.ndim != 2 or diff75302_matrix.shape[1] != feature_count:
+                diff75302_matrix = None
     except Exception:
-        diff75302_matrix = None
-    if diff99590_matrix is not None and (
-        diff99590_matrix.ndim != 2 or diff99590_matrix.shape[1] != feature_count
-    ):
-        diff99590_matrix = None
-    if diff75302_matrix is not None and (
-        diff75302_matrix.ndim != 2 or diff75302_matrix.shape[1] != feature_count
-    ):
         diff75302_matrix = None
 
+    dataset_names = sorted(a_matrix_dict)
+    # check standard errors exists and not zero for each dataset
+    for dataset in dataset_names:
+        if dataset not in b_vec_dict:
+            raise ValueError(f"Dataset {dataset} is missing from b_vec_dict")
+        if dataset not in standard_errors:
+            raise ValueError(f"Dataset {dataset} is missing from standard_errors")
+        if standard_errors[dataset] == 0.0:
+            raise ValueError(f"Dataset {dataset} has a standard error of zero, which is not valid for relative error calculations")
+    
+    
     if dataset_info:
-        # Follow the dataset order from dataset_info and keep only datasets that
-        # are available in every input needed for relative-error analysis.
-        dataset_names = [
-            dataset
-            for dataset in dataset_info
-            if dataset in a_matrix_dict and dataset in b_vec_dict and dataset in standard_errors and standard_errors[dataset] != 0.0
-        ]
-    else:
-        dataset_names = [
-            dataset
-            for dataset in sorted(a_matrix_dict)
-            if dataset in b_vec_dict and dataset in standard_errors and standard_errors[dataset] != 0.0
-        ]
-
-    if not dataset_names:
-        raise ValueError("No matching datasets were found across processed data and standard_errors")
+        # Follow the dataset order from dataset_info and put missing datasets at the end.
+        ordered_datasets = []
+        for dataset in dataset_info:
+            if dataset in dataset_names:
+                ordered_datasets.append(dataset)
+        for dataset in dataset_names:
+            if dataset not in dataset_info:
+                ordered_datasets.append(dataset)
+        dataset_names = ordered_datasets
 
     datatype_groups: dict[str, list[str]] = {}
     if dataset_info:
@@ -167,28 +173,18 @@ def analyze_run_directory(
     if not detailed_labels:
         raise ValueError(f"No beta files were found in {run_dir}")
 
-    # The CSVs are written in transposed form: one metric per row and one beta per column.
-    detailed_rows: list[dict[str, float | str]] = []
-    for metric_name in metric_order:
-        row: dict[str, float | str] = {"Metric": metric_name}
-        for label in detailed_labels:
-            row[label] = metrics_by_label[label].get(metric_name, "")
-        detailed_rows.append(row)
     detailed_result_csv = run_dir / "detailed_result.csv"
-    write_csv_rows(detailed_result_csv, ["Metric"] + detailed_labels, detailed_rows)
+    # metrics_by_label already stores one column per beta, so let pandas do the transpose directly.
+    detailed_frame = pd.DataFrame(metrics_by_label)
+    detailed_frame = detailed_frame.reindex(metric_order)
+    detailed_frame = detailed_frame.reindex(columns=detailed_labels)
+    detailed_frame.rename_axis("Metric").reset_index().to_csv(detailed_result_csv, index=False)
 
     representative_labels = [best_by_nonzero[nonzeros][2] for nonzeros in sorted(best_by_nonzero)]
-    representative_rows: list[dict[str, float | str]] = []
-    for metric_name in metric_order:
-        row = {"Metric": metric_name}
-        for label in representative_labels:
-            row[label] = metrics_by_label[label].get(metric_name, "")
-        representative_rows.append(row)
     representative_scan_csv = run_dir / "representative_scan.csv"
-    write_csv_rows(
+    detailed_frame.reindex(columns=representative_labels).rename_axis("Metric").reset_index().to_csv(
         representative_scan_csv,
-        ["Metric"] + representative_labels,
-        representative_rows,
+        index=False,
     )
 
     print(f"Analysis written to {run_dir}")
