@@ -1,0 +1,29 @@
+{
+  "a_matrix_name": "A_matrix.npy",
+  "a_rows": [
+    64,
+    153,
+    166
+  ],
+  "b_vec_name": "b_vec.npy",
+  "coefficient_bound": 25.0,
+  "diff_name": "diff_constraint_99590.npy",
+  "diff_rows": 5,
+  "feature_count": 289,
+  "grid_threshold": 0.015,
+  "input_dir": "example/processed_data",
+  "nonzeros": [
+    6,
+    8,
+    10
+  ],
+  "nthreads": 4,
+  "out_dir": "example/runs/pass2",
+  "random_seed": 0,
+  "repeats": 2,
+  "time_limit": 600,
+  "training_rows": 18,
+  "verbose": false,
+  "warm_start_dir": "example/runs/pass1",
+  "weight_name": "weight_vec.npy"
+}

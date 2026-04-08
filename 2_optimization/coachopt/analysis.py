@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +12,42 @@ import pandas as pd
 from .utils import ensure_directory, load_pickle
 
 HARTREE_TO_KCAL_MOL = 627.50947406
+
+
+@dataclass
+class BetaCandidate:
+    """One saved beta vector plus its label metadata."""
+
+    label: str
+    coefficients: np.ndarray
+
+
+def load_beta_candidates(run_dir: str | Path) -> list[BetaCandidate]:
+    """Load all saved beta candidates from one optimization directory."""
+    run_dir = Path(run_dir)
+    candidates: list[BetaCandidate] = []
+
+    for beta_path in sorted(run_dir.glob("betas_nonzero*.npy")):
+        suffix = beta_path.stem.split("betas_nonzero", 1)[1]
+        if not suffix.isdigit():
+            continue
+
+        beta_array = np.load(beta_path)
+        if beta_array.ndim == 1:
+            beta_array = beta_array.reshape(1, -1)
+
+        score_path = run_dir / f"{beta_path.stem}.json"
+        labels: list[str] = []
+        if score_path.exists():
+            with score_path.open("r", encoding="utf-8") as handle:
+                score_entries = json.load(handle)
+            labels = [str(entry.get("label", f"cand{idx}")) for idx, entry in enumerate(score_entries)]
+
+        for idx, coefficients in enumerate(np.asarray(beta_array, dtype=float)):
+            label = labels[idx] if idx < len(labels) else f"{beta_path.stem}_cand{idx}"
+            candidates.append(BetaCandidate(label=label, coefficients=coefficients))
+
+    return candidates
 
 
 def analyze_run_directory(
