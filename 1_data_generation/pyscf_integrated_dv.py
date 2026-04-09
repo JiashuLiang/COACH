@@ -1,5 +1,6 @@
 """Generate integratedDV matrices from PySCF using the cleaned COACH baseline layout."""
 
+import argparse
 import math
 from pathlib import Path
 
@@ -23,29 +24,81 @@ BLOCK_SIZE = 20000
 OUTPUT_TXT = "1_data_generation/pyscf_integratedDV_matrices.txt"
 XC_GRID = (99, 590)
 NL_GRID = (75, 302)
-REFERENCE_ENERGY_BREAKDOWN = {
-    "total": -76.4407590520,
-    "nuc": 9.181285695624,
-    "alpha_hf_x": -1.40555122549676,
-    "beta_hf_x": -1.40555122549676,
-    "dft_corr": -0.41826530714886,
-    "dft_x": -6.11450844803026,
-    "dft_nlc": 0.04257534026311,
-    "one_e_alpha": -61.49829625353800,
-    "one_e_beta": -61.49829625353807,
-    "coul": 46.67584862541301,
-    "alpha_lr_hf_x": -0.79296360752688,
-    "beta_lr_hf_x": -0.79296360752688,
-}
-REFERENCE_ENERGY_BREAKDOWN["alpha_sr_hf_x"] = REFERENCE_ENERGY_BREAKDOWN["alpha_hf_x"] - REFERENCE_ENERGY_BREAKDOWN["alpha_lr_hf_x"]
-REFERENCE_ENERGY_BREAKDOWN["beta_sr_hf_x"] = REFERENCE_ENERGY_BREAKDOWN["beta_hf_x"] - REFERENCE_ENERGY_BREAKDOWN["beta_lr_hf_x"]
-
 NELE_SERIES = 96
 NSERIES = 18
 NSERIES_X = 2 * NSERIES
 NSERIES_SS = 2 * NSERIES
 NSERIES_OS = NSERIES
 TOL = 1e-14
+
+
+def build_parser():
+    """Create the CLI parser for single-species or batch XYZ generation."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--xyz", help="Path to one XYZ file to process.")
+    parser.add_argument("--xyz-dir", help="Directory of XYZ files to process into one .txt output per file.")
+    parser.add_argument("--output-txt", help="Output text path for a single generated species.")
+    parser.add_argument("--output-dir", help="Directory for generated .txt files.")
+    parser.add_argument("--basis", default=BASIS, help="PySCF basis for generated jobs unless --use-xyz-basis is set.")
+    parser.add_argument("--use-xyz-basis", action="store_true", help="Read the basis=... field from the XYZ comment line.")
+    parser.add_argument("--xc", default=XC, help="Exchange-correlation functional passed to PySCF.")
+    parser.add_argument("--verbose", type=int, default=4, help="PySCF verbosity level.")
+    return parser
+
+
+def parse_xyz_metadata(comment_line):
+    """Parse comma-separated key=value pairs from the XYZ comment line."""
+    metadata = {}
+    for field in comment_line.split(","):
+        if "=" not in field:
+            continue
+        key, value = field.split("=", 1)
+        metadata[key.strip().lower()] = value.strip()
+    return metadata
+
+
+def load_xyz_job(path, basis_override, use_xyz_basis):
+    """Load geometry and simple metadata from an XYZ file."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if len(lines) < 3:
+        raise ValueError(f"{path}: expected at least 3 lines in XYZ file")
+
+    natom = int(lines[0].strip())
+    comment_line = lines[1].strip()
+    atom_lines = [line.rstrip() for line in lines[2 : 2 + natom] if line.strip()]
+    if len(atom_lines) != natom:
+        raise ValueError(f"{path}: expected {natom} atom lines, found {len(atom_lines)}")
+
+    metadata = parse_xyz_metadata(comment_line)
+    charge = int(metadata.get("charge", "0"))
+    multiplicity = int(metadata.get("multiplicity", "1"))
+    if multiplicity < 1:
+        raise ValueError(f"{path}: multiplicity must be >= 1")
+
+    basis = basis_override
+    if use_xyz_basis:
+        basis = metadata.get("basis", basis_override)
+        if not basis:
+            raise ValueError(f"{path}: no basis found in XYZ comment line")
+
+    return {
+        "name": path.stem,
+        "geometry": "\n".join(atom_lines),
+        "charge": charge,
+        "spin": multiplicity - 1,
+        "basis": basis,
+    }
+
+
+def build_default_job():
+    """Return the historical single-molecule defaults used by the original script."""
+    return {
+        "name": "pyscf_integratedDV_matrices",
+        "geometry": GEOMETRY.strip(),
+        "charge": CHARGE,
+        "spin": SPIN,
+        "basis": BASIS,
+    }
 
 
 def _linear_series_batch(x, n):
@@ -129,8 +182,8 @@ def expansion_basis_batch(u, w, beta_f):
         3D array with shape (npoint, 96, 18), one basis matrix per point.
 
     Notes:
-        Group-to-basis mapping (0..17) is documented in README under
-        "Expansion Group Mapping".
+        Group-to-basis mapping (0..17) is documented in
+        ``1_data_generation/README.md`` under "Expansion Group Mapping".
     """
     u_linear = _linear_series_batch(u, 8)
     u_legendre = _legendre_series_batch(u, 8)
@@ -474,7 +527,8 @@ def accumulate_integrated_dv_block(weights, rho_a, rho_b, rho_a1, rho_b1, tau_a,
 
     Notes:
         The 10 conceptual integratedDV groups (exchange/correlation channels)
-        are documented in README under "IntegratedDV Group Definitions".
+        are documented in ``1_data_generation/README.md`` under
+        "IntegratedDV Group Definitions".
     """
     block_mat = np.zeros((NELE_SERIES, 180), dtype=np.float64)
 
@@ -492,11 +546,16 @@ def accumulate_integrated_dv_block(weights, rho_a, rho_b, rho_a1, rho_b1, tau_a,
     integrated_dv += block_mat
 
 
-def build_mol_and_dm():
+def build_mol_and_dm(geometry, basis, charge, spin, xc, verbose):
     """Build molecule, run UKS(wb97xv), and return converged spin density matrices.
 
     Args:
-        None.
+        geometry: Atomic geometry string accepted by PySCF.
+        basis: PySCF basis name.
+        charge: Total molecular charge.
+        spin: PySCF spin value, equal to N_alpha - N_beta.
+        xc: Exchange-correlation functional name.
+        verbose: PySCF verbosity level.
 
     Returns:
         Tuple ``(mol, dm_a, dm_b, mf)``:
@@ -506,15 +565,15 @@ def build_mol_and_dm():
         - mf: Converged UKS object.
     """
     mol = gto.M(
-        atom=GEOMETRY,
-        basis=BASIS,
-        charge=CHARGE,
-        spin=SPIN,
+        atom=geometry,
+        basis=basis,
+        charge=charge,
+        spin=spin,
         unit="Angstrom",
-        verbose=4,
+        verbose=verbose,
     )
     mf = dft.UKS(mol)
-    mf.xc = XC
+    mf.xc = xc
     # Match the requested energy-breakdown grid setup.
     mf.grids.atom_grid = XC_GRID
     mf.grids.prune = None
@@ -612,11 +671,10 @@ def resolve_output_path():
     return repo_root / OUTPUT_TXT
 
 
-def format_energy_breakdown(energy_breakdown, ref):
+def format_energy_breakdown(energy_breakdown):
     """Format the energy breakdown text block for console and file output."""
     lines = [
-        "",
-        "Energy breakdown (PySCF @ grid (99, 590)), it is better if the diff can be smaller than 1e-6 hartree for all terms, but a little larger is acceptable:",
+        "Energy breakdown (PySCF @ grid (99, 590)):",
         f" Total energy in the final basis set =      {energy_breakdown['total']: .10f}",
         f"Nuclear Repulsion Energy =       {energy_breakdown['nuc']: .12f} hartrees",
         "",
@@ -692,26 +750,23 @@ def compute_pyscf_energy_breakdown(mf, dm_a, dm_b):
         "coul": float(mf.scf_summary["coul"]),
     }
 
-def main():
-    """Run full integratedDV generation and write matrices for all configured grids.
-
-    Args:
-        None.
-
-    Returns:
-        None.
-    """
-    output_path = resolve_output_path()
+def generate_species_output(job, output_path, xc, verbose):
+    """Run the PySCF generation flow for one species and write one text output."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"Running {job['name']} with basis={job['basis']}, charge={job['charge']}, spin={job['spin']}, xc={xc}")
 
-    mol, dm_a, dm_b, mf = build_mol_and_dm()
+    mol, dm_a, dm_b, mf = build_mol_and_dm(
+        geometry=job["geometry"],
+        basis=job["basis"],
+        charge=job["charge"],
+        spin=job["spin"],
+        xc=xc,
+        verbose=verbose,
+    )
 
     energy_breakdown = compute_pyscf_energy_breakdown(mf, dm_a, dm_b)
-    ref = REFERENCE_ENERGY_BREAKDOWN
-    energy_breakdown_text = format_energy_breakdown(energy_breakdown, ref)
-
+    energy_breakdown_text = format_energy_breakdown(energy_breakdown)
     print(energy_breakdown_text, end="")
-
     ni = dft.numint.NumInt()
 
     with output_path.open("w", encoding="utf-8") as fh:
@@ -750,6 +805,51 @@ def main():
             print(f"Wrote matrix for grid {grid_id}")
 
     print(f"Done. Output written to: {output_path}")
+
+
+def build_jobs(args):
+    """Resolve CLI arguments into concrete generation jobs and output paths."""
+    repo_root = Path(__file__).resolve().parents[1]
+    if args.xyz and args.xyz_dir:
+        raise ValueError("Use either --xyz or --xyz-dir, not both")
+    if args.output_txt and args.output_dir:
+        raise ValueError("Use either --output-txt or --output-dir, not both")
+
+    if args.xyz_dir:
+        xyz_dir = Path(args.xyz_dir).resolve()
+        xyz_paths = sorted(xyz_dir.glob("*.xyz"))
+        if not xyz_paths:
+            raise ValueError(f"No .xyz files found in {xyz_dir}")
+        output_dir = Path(args.output_dir).resolve() if args.output_dir else (repo_root / "1_data_generation/pyscf_outputs")
+        return [
+            (
+                load_xyz_job(path, args.basis, args.use_xyz_basis),
+                output_dir / f"{path.stem}.txt",
+            )
+            for path in xyz_paths
+        ]
+
+    if args.xyz:
+        xyz_path = Path(args.xyz).resolve()
+        job = load_xyz_job(xyz_path, args.basis, args.use_xyz_basis)
+        if args.output_dir:
+            output_path = Path(args.output_dir).resolve() / f"{xyz_path.stem}.txt"
+        elif args.output_txt:
+            output_path = Path(args.output_txt).resolve()
+        else:
+            output_path = resolve_output_path()
+        return [(job, output_path)]
+
+    output_path = Path(args.output_txt).resolve() if args.output_txt else resolve_output_path()
+    return [(build_default_job(), output_path)]
+
+
+def main(argv=None):
+    """Run full integratedDV generation and write matrices for all configured grids."""
+    args = build_parser().parse_args(argv)
+    jobs = build_jobs(args)
+    for job, output_path in jobs:
+        generate_species_output(job, output_path, xc=args.xc, verbose=args.verbose)
 
 
 if __name__ == "__main__":

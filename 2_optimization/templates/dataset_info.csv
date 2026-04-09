@@ -1,1 +1,138 @@
-Dataset,Datatype
+Name,Datatype_Short,Datatype,Description,#datapoints,RMS energy(kcal/mol),min,max
+BH28,BH,Barrier Height,"Highly accurate subset chosen from BHPERI, CRBH20, BHDIV10, and PX13 sets",28,35.18417718,0.717017425,65.55927319
+BH46,BH,Barrier Height,"Barrier heights of hydrogen transfer, heavy atom transfer, nucleophilic substitution, unimolecular and association reactions. This set comprises the remaining data points from BH76 after excluding those included in DBH22.",46,25.21014898,-12.30000898,104.8000793
+BH876,BH,Barrier Height,Comprehensive reaction barrier heights,876,26.99928114,-96.25999976,144.39
+BHDIV7,BH,Barrier Height,Diverse reaction barrier heights,7,48.77469439,13.64001029,96.17007263
+BHPERI11,BH,Barrier Height,Barrier heights of pericyclic reactions,11,23.00432525,14.50001076,31.30002385
+BHROT27,BH,Barrier Height,Barrier heights for rotation around single bonds,27,8.062409205,1.010000971,17.24001331
+CRBH14,BH,Barrier Height,Barrier heights for cycloreversion of heterocyclic rings ,14,45.84951969,33.71202719,52.41704985
+DBH22,BH,Barrier Height,Highly accurate subset of BH76 ,22,29.22116252,-2.399999717,82.13999681
+INV23,BH,Barrier Height,Inversion/Racemization barrier heights,23,36.57376492,4.100003204,74.20005605
+ORBH35,BH,Barrier Height,"Difficult barrier heights for oxygen reactions (e.g., vinylperoxy radical and CO3)",35,32.85693729,-0.958646224,76.69131949
+PX9,BH,Barrier Height,"Proton-exchange barriers in H2O, NH3, and HF clusters",9,38.86941188,16.60001263,59.30004502
+WCPT26,BH,Barrier Height,Barrier heights of water-catalyzed proton-transfer reactions,26,36.11347046,-6.381453204,70.10037978
+Dip146,EF,Electric field,Dipole moments (including individual components) for 146 small systems at equilibrium,190,0.121440679,-0.444741065,0.334249824
+HR46,EF,Electric field,Static polarizabilities (including individual components) for 46 systems at equilibrium,128,0.472500476,0.08230979,1.079591145
+OEEF,EF,Electric field,Relative energies in oriented external electric fields compared to zero field,136,18.02322566,-77.51651077,18.87819833
+Pol130,EF,Electric field,Static polarizabilities (including individual components) for 130 small systems at equilibrium,296,1.635569393,0.016133993,4.530221817
+T144,EF,Electric field,Static polarizabilities (including individual components) for 144 systems at equilibrium,421,0.690007338,0.145373237,1.848499211
+V30,FREQ,Frequency,"Frequencies of small molecular dimers with different polarity combinations (polar-polar, polar-nonpolar, and nonpolar-nonpolar).",275,0.000600484,6.99836216040156e-06,0.001442331
+ACONF,INC,Intramolecular Noncovalent,Isomerization energies of alkane conformers ,15,2.232807072,0.595000718,4.925003715
+Amino20x4,INC,Intramolecular Noncovalent,Isomerization energies of amino acid conformers,80,2.979750068,0.057981875,7.370005274
+BUT14DIOL,INC,Intramolecular Noncovalent,"Isomerization energies of butane-1,4-diol conformers",64,2.911270697,0.149999865,4.70000329
+ICONF,INC,Intramolecular Noncovalent,Isomerization energies in conformers of inorganic systems,17,4.540554664,0.09999991,12.16000911
+IDISP,INC,Intramolecular Noncovalent,Intramolecular dispersion interactions,6,25.22819835,-60.28004539,9.100006851
+MCONF,INC,Intramolecular Noncovalent,Isomerization energies of melatonin conformers,51,5.355226567,0.390000276,8.750006539
+PCONF21,INC,Intramolecular Noncovalent,Isomerization energies of tri- and tetrapeptide conformers,18,1.788571499,0.020017552,2.800001867
+Pentane13,INC,Intramolecular Noncovalent,Isomerization energies of stationary points on the n-pentane torsional surface ,13,6.750292928,0.598,16.557
+SCONF,INC,Intramolecular Noncovalent,Isomerization energies of sugar conformers,17,4.963499913,0.200000447,6.310004975
+UPU23,INC,Intramolecular Noncovalent,Isomerization energies of RNA-backbone conformers ,23,6.515185864,0.570000741,14.41001085
+AlkIsomer11,ISO,Isomerization,Isomerization energies of alkanes with 4-8 carbon atoms.,11,1.80971369,-3.694999847,-0.225999991
+C20C246,ISO,Isomerization,Isomerization energies of C20 and C24 ,6,41.54477954,-5.839999752,84.6400002
+C60ISO7,ISO,Isomerization,Isomerization energies of C60 isomers,7,105.8010479,37.40002838,164.8801248
+DIE60,ISO,Isomerization,Isomerization energies for double-bond migration in conjugated dienes,60,5.058761951,-6.142447165,8.604206145
+EIE22,ISO,Isomerization,Isomerization energies of enecarbonyls ,22,4.969835545,-2.748565852,9.225621033
+ISO34,ISO,Isomerization,Isomerisation energies of small- and medium-sized organic molecules,34,20.29678517,1.060000926,66.06005022
+ISOL23,ISO,Isomerization,Isomerisation energies of large organic molecules,23,28.02600081,0.139999874,71.01005391
+ISOMERIZATION20,ISO,Isomerization,Isomerization energies from the W4-11 dataset,20,44.04792432,-91.86999619,-0.209999811
+PArel,ISO,Isomerization,Isomerization energies of protonated isomers,20,6.234883597,0.600000714,17.88001336
+Styrene42,ISO,Isomerization,Isomerization energies of C8H8 ,42,67.5768184,11.51999965,124.459995
+TAUT15,ISO,Isomerization,Isomerization energies of tautomers,15,4.523378919,-5.440003878,13.03000958
+3B-69,NC,Noncovalent,3-Body non-additive interaction energies in three different orientations of 23 molecular crystals ,69,0.686841331,-2.415999954,1.694000103
+3BHET,NC,Noncovalent,3-Body non-additive interaction energies in molecular trimers,20,2.005148894,-4.62299972,4.151999894
+A19Rel6,NC,Noncovalent,Relative energies of 19 complexes from the A24 set on potential energy curves (PECs),114,1.648791671,0.076000182,5.97599988
+A24,NC,Noncovalent,Highly accurate binding energies of small non-covalent complexes ,24,2.650592874,-6.554999734,1.09599989
+ADIM6,NC,Noncovalent,Interaction energies of n-alkane dimers,6,3.659663565,1.340001301,5.550004406
+AHB21,NC,Noncovalent,Interaction energies in anion-neutral dimers ,21,26.17485691,-65.68004931,-7.970005988
+Bauza30,NC,Noncovalent,"Binding energies of halogen-, chalcogen-, and pnicogen-bonded dimers ",30,23.64907356,-46.41999808,-1.419999941
+BzDC215,NC,Noncovalent,PECs for benzene interacting with two rare-gas atoms and eight first- and second-row hydrides ,215,1.809730202,-4.198099827,4.009099835
+CARBHB8,NC,Noncovalent,"Binding energies of hydrogen-bonded complexes between carbene analogues and H2O, NH3, or HCl ",8,7.465409533,1.205000795,16.29601253
+CHB6,NC,Noncovalent,Interaction energies in cation-neutral dimers ,6,27.84524118,-39.09002937,-17.83001341
+CT20,NC,Noncovalent,Binding energies of charge-transfer complexes ,20,1.073130889,-1.829999924,-0.319999987
+DS14,NC,Noncovalent,Binding energies of complexes containing divalent sulfur,14,3.703638984,-6.329999738,-0.849999965
+FmH2O10,NC,Noncovalent,Binding energies of isomers of F-(H2O)10 ,10,168.4962352,-171.4199928,-163.589993
+H2O16Rel4,NC,Noncovalent,Isomerization energies of (H2O)16 (boat and fused cube structures) ,4,0.446416446,0.25499977,0.542000013
+H2O20Rel9,NC,Noncovalent,Isomerization energies of (H2O)20 (low-energy structures) ,9,2.758999251,1.340000046,3.949999574
+HB262,NC,Noncovalent,Binding energies of hydrogen-bonded systems ,262,7.19588836,-20.518,-2.118
+HB49,NC,Noncovalent,Binding energies of small- and medium-sized hydrogen-bonded systems ,49,14.12451975,-33.84799093,-1.749522142
+HCP32,NC,Noncovalent,"Binding energies of halogen-, chalcogen-, and pnicogen-bonded dimers ",32,4.393722468,-8.210000124,-1.019999707
+He3,NC,Noncovalent,3-Body non-additive interaction energies in helium trimers,49,25.78689207,-130.7980748,5.397773745
+HEAVY28,NC,Noncovalent,Binding energies between heavy element hydrides,28,1.429631411,0.360000303,3.350002625
+HSG,NC,Noncovalent,Binding energies of small ligands interacting with protein receptors,21,6.625684223,-19.07599921,0.377999985
+HW30,NC,Noncovalent,Binding energies of hydrocarbon-water dimers ,30,2.335564075,-3.809999842,-0.659999972
+HW6Cl5,NC,Noncovalent,Binding energies of Cl-(H2O)n (n = 1-6) ,5,62.84227145,-86.85999631,-31.00999901
+HW6F,NC,Noncovalent,Binding energies of F-(H2O)n (n =1-6) ,6,81.41626319,-116.5799952,-32.30999866
+IHB100,NC,Noncovalent,Binding energies of equilibrium ionic hydrogen-bonded dimers in the HCNO chemical space.,100,20.6886199,-40.92800023,-2.593000296
+IHB100x2,NC,Noncovalent,Binding energies of ionic hydrogen bonds at 0.8 and 1.5 times the equilibrium disctance in IHB100 ,200,13.86557406,-31.07399995,0.41200013
+IL16,NC,Noncovalent,Interaction energies in anion-cation dimers ,16,109.3428271,-120.8000912,-87.42006609
+NBC10,NC,Noncovalent,"PECs for BzBz (5), BzMe (1), MeMe (1), BzH2S (1), and PyPy (2)",184,1.914831526,-2.953999878,9.340999614
+NC11,NC,Noncovalent,Binding energies of very small non-covalent complexes ,11,0.481248154,-1.143225625,-0.031421972
+O24,NC,Noncovalent,Interaction energies in 24 small high-spin open-shell dimers,24,7.1285965,-29.52062849,-0.055982003
+O24x4,NC,Noncovalent,PECs for O24,96,4.199067031,-25.51145163,0.150648082
+PNICO23,NC,Noncovalent,Interaction energies in pnicogen-containing dimers,23,5.021315355,0.640000678,10.9700083
+RG10N,NC,Noncovalent,PECs for the 10 rare-gas dimers involving helium through krypton ,275,22.044806,-0.389643223,238.396493
+RG18,NC,Noncovalent,Interaction energies in rare-gas complexes,18,0.705234933,0.079999928,1.510001148
+S22,NC,Noncovalent,Binding energies of noncovalently bound dimers,22,9.645932587,0.527000654,20.64101552
+S66,NC,Noncovalent,Binding energies of noncovalently bound dimers,66,6.908288871,-19.83376235,-1.356224498
+S66Rel7,NC,Noncovalent,Relative energies of 66 complexes from the S66 set on PECs,462,2.743287957,-0.111999773,15.8030003
+Shields38,NC,Noncovalent,Binding energies of (H2O)n (n = 2 - 10) ,38,51.60719548,-93.14210572,-4.969796915
+SW49Bind22,NC,Noncovalent,Binding energies of isomers of SO42-(H2O) (n = 3 -5) ,22,34.1992361,-43.31960951,-19.97574942
+SW49Rel28,NC,Noncovalent,Isomerization energies of SO42-(H2O)n (n = 3-5) ,28,1.54881192,0.337022161,3.624044798
+TA13,NC,Noncovalent,Binding energies of dimers involving radicals ,13,21.99976978,-64.20171793,-1.689770689
+WATER27,NC,Noncovalent,"Binding energies in (H2O)n, H+(H2O)n and OH-(H2O)n",27,101.1863896,4.974,210.763
+X40,NC,Noncovalent,Binding energies of complexes containing halogenated molecules ,40,4.898734987,-14.13799992,-0.457999712
+X40x5,NC,Noncovalent,PECs for X40,200,4.017489171,-14.12299993,11.94900026
+XB25,NC,Noncovalent,"Binding energies of halogen-bonded dimers, compiled from XB51 and XB18 after excluding same systems in X40",25,5.880341569,-15.30410642,-0.743705403
+AE11,TC,Thermochemistry,Absolute atomic energies of closed shell atoms from Ca to Rn,11,6518016.62,-13725071.13,-425190.8871
+AE18,TC,Thermochemistry,Absolute atomic energies of hydrogen through argon ,18,148738.6101,-331036.3479,-313.754737
+AL2X6,TC,Thermochemistry,Dimerisation energies of AlX3 compounds,6,36.92939734,23.10001744,51.60003879
+ALK8,TC,Thermochemistry,Dissociation and other reactions of alkaline compounds,8,69.97119648,25.30001922,131.1300988
+AlkAtom19,TC,Thermochemistry,Atomization energies of n=1-8 alkane,19,1829.305525,-2484.259897,-420.4299826
+ALKBDE10,TC,Thermochemistry,Dissociation energies in group-1 and -2 diatomics (many MR),10,105.5330177,56.70004298,142.1001071
+AlkIsod14,TC,Thermochemistry,Isodesmic reaction energies in n = 3–8 alkanes.,14,10.35379184,2.199999909,15.39999936
+BDE99MR,TC,Thermochemistry,Multi-reference (MR) bond dissociation energies from W4-11,16,54.51318785,-105.5799957,-5.269999638
+BDE99nonMR,TC,Thermochemistry,Single-reference (SR) bond dissociation energies from W4-11,83,114.9839492,-237.0799901,-19.68999918
+BH76RC,TC,Thermochemistry,Reaction energies of the BH76 set,30,30.36473815,-103.2800781,5.440003878
+BSR36,TC,Thermochemistry,Hydrocarbon bond separation reaction energies,36,19.44800381,2.240001744,49.82003789
+CR20,TC,Thermochemistry,Cycloreversion reaction energies,20,22.3052376,-35.70381129,-7.659612819
+DARC,TC,Thermochemistry,Reaction energies of Diels-Alder reactions,14,34.94111966,-60.80004618,-14.00001059
+DC13,TC,Thermochemistry,13 difficult cases for DFT methods,13,71.31831472,-106.0000801,152.6001152
+DIPCS9,TC,Thermochemistry,Double-ionisation potentials of closed-shell systems,9,650.4319652,522.1003943,776.5005865
+EA50,TC,Thermochemistry,Vertical electron affinities,50,45.41847344,-1.153027323,103.7724654
+FH51,TC,Thermochemistry,Reaction energies in various (in-)organic systems,51,45.35381514,-150.8101137,-0.179999838
+G21EA,TC,Thermochemistry,Adiabatic electron affinities,25,41.04888643,0.189137631,89.08661077
+G21IP,TC,Thermochemistry,Adiabatic ionisation potentials,36,265.6539854,118.1305749,402.1511489
+G2RC24,TC,Thermochemistry,Reaction energies of selected systems from G2/97 set,24,71.04770846,-216.1101633,-2.180001798
+HAT707MR,TC,Thermochemistry,Heavy-atom transfer energies (MR) from W4-11,202,83.4117604,-242.6399901,233.1199904
+HAT707nonMR,TC,Thermochemistry,Heavy-atom transfer energies (SR) from W4-11,505,74.79433827,-194.2799923,242.70999
+HEAVYSB11,TC,Thermochemistry,Dissociation energies in heavy-element (i.e. Ge Se Sb) compounds,11,58.56066108,43.79003329,73.82005577
+HNBrBDE18,TC,Thermochemistry,Homolytic N-Br bond dissociation energies,18,56.94839698,44.57456822,68.21223452
+IP23,TC,Thermochemistry,Vertical ionization potentials,23,307.0311521,230.7669021,496.5627762
+IP30,TC,Thermochemistry,Vertical ionization potentials,30,281.7697742,216.0588845,379.2583815
+MB08-165,TC,Thermochemistry,"Decomposition energies of 165 artificially constructed molecules, each containing 8 atoms",165,154.4612402,-570.6164311,433.6643277
+MB16-43,TC,Thermochemistry,"Decomposition energies of 43 artificially constructed molecules, each containing 16 atoms",43,539.0308207,-362.9808742,1290.736775
+MX34,TC,Thermochemistry,Electronic atomization energies for a range of ionic clusters with the NaCl structure,34,833.2326461,52.27240515,1674.858423
+NBPRC,TC,Thermochemistry,"Oligomerizations and H2 fragmentations of NH3/BH3, H2 activation reactions with PH3/BH3 systems",12,30.90923541,-48.9,40.4
+P34AE,TC,Thermochemistry,The atomization energies of systems containing heavy p-block elements up to xenon,44,617.8877597,32.31997147,1467.886328
+P34EA,TC,Thermochemistry,The electron affinities of systems containing heavy p-block elements up to xenon,9,44.28468156,7.373358057,80.80260532
+P34IP,TC,Thermochemistry,The ionization potentials of systems containing heavy p-block elements up to xenon,15,224.4930233,129.1738098,327.9018026
+PA26,TC,Thermochemistry,Adiabatic proton affinities including amino acids,26,191.8136401,106.2000805,236.000178
+PlatonicRE18,TC,Thermochemistry,"Reaction energies of homodesmotic, isodesmic, and isogyric reactions involving platonic hydrocarbon cages, CnHn (n = 4, 6, 8, 10, 12, 20)",18,227.2378527,-43.63999828,501.849979
+PlatonicTAE6,TC,Thermochemistry,"Total atomization energies of platonic hydrocarbon cages, CnHn (n = 4, 6, 8, 10, 12, 20)",6,2539.273902,793.8999672,4621.459809
+RC21,TC,Thermochemistry,Fragmentations and rearrangements in organic radical cations,21,43.94127493,-6.720005233,126.5600954
+RSE43,TC,Thermochemistry,Radical stabilization energies,43,9.956132208,-26.40002011,6.90000507
+SIE4x4,TC,Thermochemistry,Self-interaction-error related problems,16,38.07484002,4.900003737,64.40004858
+SN13,TC,Thermochemistry,Nucleophilic substitution energies ,13,25.66593368,-48.05999806,-2.539999591
+TAE_W4-17MR,TC,Thermochemistry,Total atomization energies (MR) from W4-17,17,141.4940459,53.07003997,234.330177
+TAE_W4-17nonMR,TC,Thermochemistry,Total atomization energies (SR) from W4-17 ,183,518.6034544,39.0500294,1597.310207
+WCPT6,TC,Thermochemistry,Tautomerization energies for water-catalyzed proton-transfer reactions ,6,7.526327898,-0.860420911,11.13766691
+YBDE18,TC,Thermochemistry,Bond-dissociation energies in ylides,18,53.11408087,12.3100096,91.14006901
+3d4dIPSS,TM,Transition Metal,Spin-state relative energies and ionization potentials for first-row (3d) and second-row (4d) transition metals,32,138.9673691,1.92000015,212.2799999
+CUAGAU83,TM,Transition Metal,"Atomization, ionization, isomerization, and binding energies  of molecular systems containing Cu, Ag, and Au",83,114.1203505,-31.92285461,460.7074571
+DAPD,TM,Transition Metal,Difficult bonding energies of Pd-containing diatomic molecules,12,64.93111874,18.23955386,87.00459278
+MME52,TM,Transition Metal,Reaction energies and barrier heights of metalloenzyme models,52,21.71458724,-77.32199977,65.05620512
+MOBH28,TM,Transition Metal,Barrier heights involving organometallic complexes compiled from real-life organometallic catalytic problems,56,26.91048783,-4.289999895,82.33999976
+MOR13,TM,Transition Metal,"Statistically significant subsets from MOR41, which contain the reaction energies of closed-shell organometallic reactions",13,33.90367577,-64.40000026,27.00000012
+ROST61,TM,Transition Metal,Reaction energies of reactions involving open-shell single-reference transition-metal complexes,61,64.10141009,-203.09,-0.650000041
+TMB11,TM,Transition Metal,"Statistically significant subsets from TMB50, which contain reaction barriers involving transition metal complexes",11,16.13810639,3.350000115,37.13999975
+TMD10,TM,Transition Metal,"Statistically significant subsets from TMD60, which contain bonding energies for diatomic transition-metal species",10,88.93624659,34.29732285,151.003824

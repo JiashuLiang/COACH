@@ -1,0 +1,18 @@
+[
+  {
+    "label": "simple_repeat_0",
+    "wrmse_train_kcal_mol": 0.1290532363055517
+  },
+  {
+    "label": "simple_repeat_1",
+    "wrmse_train_kcal_mol": 0.09559424334353339
+  },
+  {
+    "label": "example_runs_pass1_betas_nonzero10.npy_repeat_0",
+    "wrmse_train_kcal_mol": 0.12949248139733863
+  },
+  {
+    "label": "example_runs_pass1_betas_nonzero10.npy_repeat_1",
+    "wrmse_train_kcal_mol": 0.09559424334353339
+  }
+]

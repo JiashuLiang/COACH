@@ -1,203 +1,230 @@
-"""Reusable analysis helpers for post-processing optimization runs."""
+"""Post-processing for optimization runs."""
 
 from __future__ import annotations
 
-import shutil
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
-from .constants import DEFAULT_DIFF_MATRIX_NAME, DEFAULT_GRID_THRESHOLD, HARTREE_TO_KCAL_MOL
-from .utils import ensure_directory, load_pickle, write_csv_rows, write_json
+from .utils import ensure_directory, load_pickle
 
-
-def rms(values: np.ndarray) -> float:
-    """Compute an unweighted root-mean-square value."""
-    return float(np.sqrt(np.mean(np.square(values))))
+HARTREE_TO_KCAL_MOL = 627.50947406
 
 
-def wrms(values: np.ndarray, weights: np.ndarray) -> float:
-    """Compute a weighted root-mean-square value with per-row scaling."""
-    return float(np.sqrt(np.mean(np.square(values) * weights)))
-
-
-@dataclass(frozen=True)
+@dataclass
 class BetaCandidate:
-    """One beta vector loaded from a ``betas_nonzero*.npy`` artifact."""
+    """One saved beta vector plus its label metadata."""
 
     label: str
-    nonzeros: int
-    candidate_index: int
     coefficients: np.ndarray
-    source_file: Path
 
 
 def load_beta_candidates(run_dir: str | Path) -> list[BetaCandidate]:
-    """Load all beta candidates saved by the optimization sweep."""
+    """Load all saved beta candidates from one optimization directory."""
+    run_dir = Path(run_dir)
     candidates: list[BetaCandidate] = []
-    for path in sorted(Path(run_dir).glob("betas_nonzero*.npy")):
-        suffix = path.stem.split("betas_nonzero", 1)[1]
+
+    for beta_path in sorted(run_dir.glob("betas_nonzero*.npy")):
+        suffix = beta_path.stem.split("betas_nonzero", 1)[1]
         if not suffix.isdigit():
             continue
-        nonzeros = int(suffix)
-        data = np.load(path)
-        if data.ndim == 1:
-            data = data.reshape(1, -1)
-        for idx, coeff in enumerate(np.asarray(data, dtype=float)):
-            candidates.append(
-                BetaCandidate(
-                    label=f"nz{nonzeros}_cand{idx}",
-                    nonzeros=nonzeros,
-                    candidate_index=idx,
-                    coefficients=coeff,
-                    source_file=path,
-                )
-            )
+
+        beta_array = np.load(beta_path)
+        if beta_array.ndim == 1:
+            beta_array = beta_array.reshape(1, -1)
+
+        score_path = run_dir / f"{beta_path.stem}.json"
+        labels: list[str] = []
+        if score_path.exists():
+            with score_path.open("r", encoding="utf-8") as handle:
+                score_entries = json.load(handle)
+            labels = [str(entry.get("label", f"cand{idx}")) for idx, entry in enumerate(score_entries)]
+
+        for idx, coefficients in enumerate(np.asarray(beta_array, dtype=float)):
+            label = labels[idx] if idx < len(labels) else f"{beta_path.stem}_cand{idx}"
+            candidates.append(BetaCandidate(label=label, coefficients=coefficients))
+
     return candidates
-
-
-def _grid_stats(diff_matrix: np.ndarray | None, coeff: np.ndarray, threshold: float) -> dict[str, float]:
-    """Summarize grid-difference magnitudes for one coefficient vector."""
-    if diff_matrix is None:
-        return {}
-    values = np.abs(diff_matrix @ coeff) * HARTREE_TO_KCAL_MOL
-    return {
-        "grid_max_diff_kcal_mol": float(values.max(initial=0.0)),
-        "grid_median_diff_kcal_mol": float(np.median(values)) if values.size else 0.0,
-        "grid_count_diff_gt_threshold": int(np.sum(values > threshold)),
-        "grid_count_diff_gt_0_1": int(np.sum(values > 0.1)),
-        "grid_count_diff_gt_0_5": int(np.sum(values > 0.5)),
-    }
-
-
-def _dataset_rmse_map(
-    coeff: np.ndarray,
-    a_matrix_dict: dict[str, np.ndarray],
-    b_vec_dict: dict[str, np.ndarray],
-) -> dict[str, float]:
-    """Compute per-dataset RMSE values for one beta candidate."""
-    return {
-        dataset: rms(np.asarray(b_vec_dict[dataset]) - np.asarray(a_matrix_dict[dataset]) @ coeff) * HARTREE_TO_KCAL_MOL
-        for dataset in sorted(a_matrix_dict)
-    }
 
 
 def analyze_run_directory(
     run_dir: str | Path,
     processed_dir: str | Path,
+    standard_errors: dict[str, float],
     dataset_info: dict[str, dict[str, str]] | None = None,
-    baseline_errors: dict[str, dict[str, float]] | None = None,
-    diff_name: str = DEFAULT_DIFF_MATRIX_NAME,
-    grid_threshold: float = DEFAULT_GRID_THRESHOLD,
-) -> dict[str, str]:
-    """Analyze a run directory and materialize summary CSVs plus best-model artifacts."""
+) -> None:
+    """Analyze one run directory and write the requested CSV summaries."""
     run_dir = Path(run_dir)
     processed_dir = Path(processed_dir)
-    analysis_dir = ensure_directory(run_dir / "analysis")
-    best_dir = ensure_directory(run_dir / "best_models")
+    ensure_directory(run_dir)
 
-    a_matrix = np.load(processed_dir / "A_matrix.npy")
-    b_vec = np.load(processed_dir / "b_vec.npy")
-    weight_vec = np.load(processed_dir / "weight_vec.npy")
     a_matrix_dict = load_pickle(processed_dir / "A_matrix_dataset.pkl")
     b_vec_dict = load_pickle(processed_dir / "b_vec_dataset.pkl")
-    diff_path = processed_dir / diff_name
-    diff_matrix = np.load(diff_path) if diff_path.exists() else None
 
-    candidates = load_beta_candidates(run_dir)
-    if not candidates:
+    diff99590_path = processed_dir / "diff_99590.npy"
+    diff75302_path = processed_dir / "diff_75302.npy"
+    feature_count = next(iter(a_matrix_dict.values())).shape[1]
+
+    # Attempt to load the diff matrices. If not available or not the expected shape, we'll skip those metrics.
+    diff99590_matrix = None
+    diff75302_matrix = None
+    try:
+        if diff99590_path.exists():
+            diff99590_matrix = np.load(diff99590_path)
+            if diff99590_matrix.ndim != 2 or diff99590_matrix.shape[1] != feature_count:
+                diff99590_matrix = None
+    except Exception:
+        diff99590_matrix = None
+    try:
+        if diff75302_path.exists():
+            diff75302_matrix = np.load(diff75302_path)
+            if diff75302_matrix.ndim != 2 or diff75302_matrix.shape[1] != feature_count:
+                diff75302_matrix = None
+    except Exception:
+        diff75302_matrix = None
+
+    dataset_names = sorted(a_matrix_dict)
+    # check standard errors exists and not zero for each dataset
+    for dataset in dataset_names:
+        if dataset not in b_vec_dict:
+            raise ValueError(f"Dataset {dataset} is missing from b_vec_dict")
+        if dataset not in standard_errors:
+            raise ValueError(f"Dataset {dataset} is missing from standard_errors")
+        if standard_errors[dataset] == 0.0:
+            raise ValueError(f"Dataset {dataset} has a standard error of zero, which is not valid for relative error calculations")
+    
+    
+    if dataset_info:
+        # Follow the dataset order from dataset_info and put missing datasets at the end.
+        ordered_datasets = []
+        for dataset in dataset_info:
+            if dataset in dataset_names:
+                ordered_datasets.append(dataset)
+        for dataset in dataset_names:
+            if dataset not in dataset_info:
+                ordered_datasets.append(dataset)
+        dataset_names = ordered_datasets
+
+    datatype_groups: dict[str, list[str]] = {}
+    if dataset_info:
+        for dataset in dataset_names:
+            datatype = dataset_info.get(dataset, {}).get("Datatype", "").strip()
+            if datatype:
+                datatype_groups.setdefault(datatype, []).append(dataset)
+
+    metric_order = [
+        "mean relative error",
+        "median relative error",
+        *[f"{datatype} mean relative error" for datatype in sorted(datatype_groups)],
+    ]
+    if diff99590_matrix is not None:
+        metric_order.extend([
+            "99590 max diff",
+            "99590 Percentage diff > 0.015 kcal/mol",
+            "99590 count diff > 0.015 kcal/mol",
+            "99590 count diff > 0.1 kcal/mol",
+            "99590 count diff > 0.5 kcal/mol",
+        ])
+    if diff75302_matrix is not None:
+        metric_order.extend([
+            "75302 max diff",
+            "75302 median diff",
+            "75302 Percentage diff > 0.015 kcal/mol",
+            "75302 count diff > 0.015 kcal/mol",
+            "75302 count diff > 0.1 kcal/mol",
+            "75302 count diff > 0.5 kcal/mol",
+        ])
+    metric_order.extend(dataset_names)
+
+    detailed_labels: list[str] = []
+    metrics_by_label: dict[str, dict[str, float | str]] = {}
+    best_by_nonzero: dict[int, tuple[float, float, str]] = {}
+
+    for beta_path in sorted(run_dir.glob("betas_nonzero*.npy")):
+        suffix = beta_path.stem.split("betas_nonzero", 1)[1]
+        if not suffix.isdigit():
+            continue
+
+        nonzeros = int(suffix)
+        beta_array = np.load(beta_path)
+        if beta_array.ndim == 1:
+            beta_array = beta_array.reshape(1, -1)
+
+        for candidate_index, coefficients in enumerate(np.asarray(beta_array, dtype=float)):
+            label = f"{beta_path.stem}_cand{candidate_index}"
+            detailed_labels.append(label)
+
+            relative_errors: dict[str, float] = {}
+            for dataset in dataset_names:
+                residual = np.asarray(b_vec_dict[dataset]) - np.asarray(a_matrix_dict[dataset]) @ coefficients
+                dataset_rmse = float(np.sqrt(np.mean(np.square(residual))) * HARTREE_TO_KCAL_MOL)
+                relative_errors[dataset] = dataset_rmse / standard_errors[dataset]
+
+            metrics: dict[str, float | str] = {
+                "mean relative error": float(np.mean(list(relative_errors.values()))),
+                "median relative error": float(np.median(list(relative_errors.values()))),
+            }
+            for datatype in sorted(datatype_groups):
+                metrics[f"{datatype} mean relative error"] = float(
+                    np.mean([relative_errors[dataset] for dataset in datatype_groups[datatype]])
+                )
+
+            if diff99590_matrix is not None:
+                diff99590 = np.abs(diff99590_matrix @ coefficients) * HARTREE_TO_KCAL_MOL
+                metrics["99590 max diff"] = float(np.max(diff99590, initial=0.0))
+                metrics["99590 Percentage diff > 0.015 kcal/mol"] = "{:.2f}%".format(
+                    np.sum(diff99590 > 0.015) / len(diff99590) * 100 if len(diff99590) else 0.0
+                )
+                metrics["99590 count diff > 0.015 kcal/mol"] = int(np.sum(diff99590 > 0.015))
+                metrics["99590 count diff > 0.1 kcal/mol"] = int(np.sum(diff99590 > 0.1))
+                metrics["99590 count diff > 0.5 kcal/mol"] = int(np.sum(diff99590 > 0.5))
+
+            if diff75302_matrix is not None:
+                diff75302 = np.abs(diff75302_matrix @ coefficients) * HARTREE_TO_KCAL_MOL
+                metrics["75302 max diff"] = float(np.max(diff75302, initial=0.0))
+                metrics["75302 median diff"] = float(np.median(diff75302)) if len(diff75302) else 0.0
+                metrics["75302 Percentage diff > 0.015 kcal/mol"] = "{:.2f}%".format(
+                    np.sum(diff75302 > 0.015) / len(diff75302) * 100 if len(diff75302) else 0.0
+                )
+                metrics["75302 count diff > 0.015 kcal/mol"] = int(np.sum(diff75302 > 0.015))
+                metrics["75302 count diff > 0.1 kcal/mol"] = int(np.sum(diff75302 > 0.1))
+                metrics["75302 count diff > 0.5 kcal/mol"] = int(np.sum(diff75302 > 0.5))
+
+            # The final block of rows is the per-dataset relative error table.
+            metrics.update(relative_errors)
+            metrics_by_label[label] = metrics
+
+            # Representative scan keeps the beta with the lowest overall mean relative error
+            # for each sparsity level, with median relative error as the tie-breaker.
+            score = (
+                float(metrics["mean relative error"]),
+                float(metrics["median relative error"]),
+                label,
+            )
+            current_best = best_by_nonzero.get(nonzeros)
+            if current_best is None or score < current_best:
+                best_by_nonzero[nonzeros] = score
+
+    if not detailed_labels:
         raise ValueError(f"No beta files were found in {run_dir}")
 
-    summary_rows: list[dict] = []
-    dataset_rmse_rows: dict[str, dict[str, float | str]] = {}
-    best_by_nonzero: dict[int, tuple[BetaCandidate, dict]] = {}
+    detailed_result_csv = run_dir / "detailed_result.csv"
+    # metrics_by_label already stores one column per beta, so let pandas do the transpose directly.
+    detailed_frame = pd.DataFrame(metrics_by_label)
+    detailed_frame = detailed_frame.reindex(metric_order)
+    detailed_frame = detailed_frame.reindex(columns=detailed_labels)
+    detailed_frame.rename_axis("Metric").reset_index().to_csv(detailed_result_csv, index=False)
 
-    for candidate in candidates:
-        residual = b_vec - a_matrix @ candidate.coefficients
-        row = {
-            "label": candidate.label,
-            "nonzeros": candidate.nonzeros,
-            "candidate_index": candidate.candidate_index,
-            "source_file": str(candidate.source_file.name),
-            "rmse_train_kcal_mol": rms(residual) * HARTREE_TO_KCAL_MOL,
-            "wrmse_train_kcal_mol": wrms(residual, weight_vec) * HARTREE_TO_KCAL_MOL,
-        }
-        row.update(_grid_stats(diff_matrix, candidate.coefficients, grid_threshold))
-        dataset_rmse = _dataset_rmse_map(candidate.coefficients, a_matrix_dict, b_vec_dict)
-
-        if baseline_errors:
-            for baseline_name in next(iter(baseline_errors.values())).keys():
-                ratios = [
-                    dataset_rmse[dataset] / baseline_errors[dataset][baseline_name]
-                    for dataset in dataset_rmse
-                    if dataset in baseline_errors and baseline_errors[dataset][baseline_name] != 0.0
-                ]
-                if ratios:
-                    row[f"mean_relative_{baseline_name}"] = float(np.mean(ratios))
-                    row[f"median_relative_{baseline_name}"] = float(np.median(ratios))
-
-        summary_rows.append(row)
-
-        for dataset, value in dataset_rmse.items():
-            dataset_row = dataset_rmse_rows.setdefault(
-                dataset,
-                {
-                    "Dataset": dataset,
-                    "Datatype": (dataset_info or {}).get(dataset, {}).get("Datatype", ""),
-                },
-            )
-            dataset_row[candidate.label] = value
-
-        current_best = best_by_nonzero.get(candidate.nonzeros)
-        if current_best is None or row["wrmse_train_kcal_mol"] < current_best[1]["wrmse_train_kcal_mol"]:
-            best_by_nonzero[candidate.nonzeros] = (candidate, row)
-
-    summary_rows.sort(key=lambda item: (item["nonzeros"], item["candidate_index"]))
-    best_candidates = [item[0] for item in sorted(best_by_nonzero.values(), key=lambda pair: pair[0].nonzeros)]
-    overall_best, overall_best_summary = min(
-        best_by_nonzero.values(),
-        key=lambda item: (item[1]["wrmse_train_kcal_mol"], item[1]["rmse_train_kcal_mol"]),
+    representative_labels = [best_by_nonzero[nonzeros][2] for nonzeros in sorted(best_by_nonzero)]
+    representative_scan_csv = run_dir / "representative_scan.csv"
+    detailed_frame.reindex(columns=representative_labels).rename_axis("Metric").reset_index().to_csv(
+        representative_scan_csv,
+        index=False,
     )
 
-    summary_fieldnames = list(summary_rows[0].keys())
-    write_csv_rows(analysis_dir / "summary.csv", summary_fieldnames, summary_rows)
-
-    best_summary_rows = [item[1] for item in sorted(best_by_nonzero.values(), key=lambda pair: pair[0].nonzeros)]
-    write_csv_rows(analysis_dir / "best_by_nonzeros.csv", summary_fieldnames, best_summary_rows)
-
-    dataset_labels = [candidate.label for candidate in best_candidates]
-    if overall_best.label not in dataset_labels:
-        dataset_labels.append(overall_best.label)
-    dataset_fieldnames = ["Dataset", "Datatype"] + dataset_labels
-    dataset_rows = []
-    for dataset in sorted(dataset_rmse_rows):
-        source_row = dataset_rmse_rows[dataset]
-        row = {field: source_row.get(field, "") for field in dataset_fieldnames}
-        dataset_rows.append(row)
-    write_csv_rows(analysis_dir / "dataset_rmse.csv", dataset_fieldnames, dataset_rows)
-
-    np.save(best_dir / "best_overall.npy", overall_best.coefficients)
-    shutil.copy2(overall_best.source_file, best_dir / overall_best.source_file.name)
-    for candidate in best_candidates:
-        np.save(best_dir / f"best_nonzero{candidate.nonzeros}.npy", candidate.coefficients)
-
-    write_json(
-        analysis_dir / "analysis_manifest.json",
-        {
-            "run_dir": str(run_dir),
-            "processed_dir": str(processed_dir),
-            "candidate_count": len(candidates),
-            "overall_best_label": overall_best.label,
-            "overall_best_nonzeros": overall_best.nonzeros,
-            "overall_best_wrmse_train_kcal_mol": overall_best_summary["wrmse_train_kcal_mol"],
-        },
-    )
-
-    return {
-        "analysis_dir": str(analysis_dir),
-        "summary_csv": str(analysis_dir / "summary.csv"),
-        "best_by_nonzeros_csv": str(analysis_dir / "best_by_nonzeros.csv"),
-        "dataset_rmse_csv": str(analysis_dir / "dataset_rmse.csv"),
-        "best_models_dir": str(best_dir),
-    }
+    print(f"Analysis written to {run_dir}")
+    print(detailed_result_csv)
+    print(representative_scan_csv)
