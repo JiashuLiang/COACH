@@ -134,6 +134,7 @@ The examples above show the minimal baseline commands. [`run_mio.py`](run_mio.py
 - `--nonzeros`, `--nthreads`, `--repeats`, `--time_limit`, `--random_seed`, `--verbose`: control sweep size and solver runtime behavior. `--repeats` is the number of solves to run for each warm start and defaults to `1`.
 - `--input_dir`, `--out_dir`: choose where optimization reads inputs and writes outputs.
 - `--A_rows`: override the three fitting rows used to define the 289-parameter baseline.
+  In the constraint code, `row % 18` selects the basis-group index and `row // 18` selects the exchange mode.
 - `--bvec_name`, `--Amatrix_name`, `--weight_name`, `--diff_name`: override input artifact filenames inside `--input_dir`.
 - `--with_diff`, `--grid_thresh`: enable diff-matrix constraints and set the threshold in kcal/mol.
 - `--warm_start_dir`: for each requested sparsity, load `betas_nonzero<N>.npy` from this directory after the built-in `simple` seed. This matches the pass-1 to pass-2 handoff when adding selected grid constraints.

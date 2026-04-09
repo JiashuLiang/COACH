@@ -2,10 +2,6 @@
 
 COACH is a script-first workflow for training the COACH exchange-correlation functional from precomputed reaction data.
 
-## Validation Status
-
-The original COACH workflow used Q-Chem. The PySCF-based path in this repository replaces that original route, but it has not been validated as extensively as the earlier implementation. Treat generated data and fitted models as research artifacts that should be checked carefully before downstream use.
-
 ## Supported Workflow
 
 The maintained baseline pipeline is:
@@ -51,6 +47,19 @@ A runnable reference example based on the AE18 atomic XYZ files lives under [`ex
 - [`2_optimization/`](2_optimization): preprocessing, optimization, grid-constraint selection, and analysis
 - [`Optimization.md`](Optimization.md): manuscript-side description of the fitting procedure
 - [`1_data_generation/qchem_codes_insert.C`](1_data_generation/qchem_codes_insert.C): reference-only Q-Chem/C++ source retained for comparison; it is not part of the maintained workflow
+
+## Citation
+
+If you use this workflow in academic work, please cite:
+
+```bibtex
+@article{liang2026reaching,
+  title={Reaching for the performance limit of hybrid density functional theory for molecular chemistry},
+  author={Liang, Jiashu and Head-Gordon, Martin},
+  journal={arXiv preprint arXiv:2603.23466},
+  year={2026}
+}
+```
 
 ## Contact
 

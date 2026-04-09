@@ -182,8 +182,8 @@ def expansion_basis_batch(u, w, beta_f):
         3D array with shape (npoint, 96, 18), one basis matrix per point.
 
     Notes:
-        Group-to-basis mapping (0..17) is documented in README under
-        "Expansion Group Mapping".
+        Group-to-basis mapping (0..17) is documented in
+        ``1_data_generation/README.md`` under "Expansion Group Mapping".
     """
     u_linear = _linear_series_batch(u, 8)
     u_legendre = _legendre_series_batch(u, 8)
@@ -527,7 +527,8 @@ def accumulate_integrated_dv_block(weights, rho_a, rho_b, rho_a1, rho_b1, tau_a,
 
     Notes:
         The 10 conceptual integratedDV groups (exchange/correlation channels)
-        are documented in README under "IntegratedDV Group Definitions".
+        are documented in ``1_data_generation/README.md`` under
+        "IntegratedDV Group Definitions".
     """
     block_mat = np.zeros((NELE_SERIES, 180), dtype=np.float64)
 

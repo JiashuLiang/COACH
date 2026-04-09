@@ -1,11 +1,26 @@
-"""
-Helpers for constructing manuscript-style constraint matrices.
-0) exchange(0,0) + sr_ex = 1.0 => exchange(0,0) between 0 and 1.0
-1) |beta[i]|<10 for any i
-2) 0<=gx<=2.2146
-3) -10<=gcss<=10
-4)-10<=gcos<=10,
-5) gx<=1.479 (alpha = 0)
+"""Helpers for constructing manuscript-style physical-constraint matrices.
+
+The optimizer works with a 289-parameter coefficient vector:
+
+- indices `0:96`: exchange coefficients
+- indices `96:192`: same-spin correlation coefficients
+- indices `192:288`: opposite-spin correlation coefficients
+- index `288`: short-range exact-exchange mixing scalar
+
+`a_rows` chooses which integratedDV row family defines each 96-coefficient
+block. For each selected row:
+
+- `row % 18` picks the basis-group index within one 18-group family
+- `row // 18` picks the exchange mode, where modes `1` and `3` apply the
+  nonuniform scaling factor used in the manuscript baseline
+
+The constraint matrices returned by `build_physical_constraints()` encode the mesh grids to enforce the following conditions:
+
+- `exchange00_relation`: the normalization condition `exchange(0,0) + sr_ex = 1`
+- `exchange_bounds`: sampled bounds enforcing `0 <= gx <= 2.2146`
+- `same_spin_bounds`: sampled bounds enforcing `-10 <= gcss <= 10`
+- `opposite_spin_bounds`: sampled bounds enforcing `-10 <= gcos <= 10`
+- `gx_one_constraint`: the additional sampled bound `gx <= 1.479` on the one-electron limit
 """
 
 from __future__ import annotations
@@ -51,7 +66,20 @@ def ux_to_s2(values: np.ndarray) -> np.ndarray:
 
 
 def expansion_assist(us: np.ndarray, ws: np.ndarray, choice: int) -> tuple[np.ndarray, np.ndarray]:
-    """Select the requested polynomial families for the exchange/correlation basis."""
+    """Select the polynomial families for one 96-term tensor-product basis.
+
+    `choice` is an integer in `0..8`:
+
+    - `0..2`: linear `u`
+    - `3..5`: Legendre `u`
+    - `6..8`: Chebyshev `u`
+
+    In each block of three, `choice % 3` selects the companion family:
+
+    - `0`: linear
+    - `1`: Legendre
+    - `2`: Chebyshev
+    """
     if choice < 3:
         us_expanded = linear_expansion(us, 8)
     elif choice < 6:
