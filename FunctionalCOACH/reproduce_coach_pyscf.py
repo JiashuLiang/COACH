@@ -322,7 +322,7 @@ class CoachSemilocal:
             ],
             axis=1,
         )
-        vtau = np.stack([vxa_ta + vcss_ta + vcos["V_TA"], vxb_tb + vcss_tb + vcos["V_TB"]], axis=1)
+        vtau = 2.0 * np.stack([vxa_ta + vcss_ta + vcos["V_TA"], vxb_tb + vcss_tb + vcos["V_TB"]], axis=1)
 
         rho_tot = np.maximum(rho_a[0], 0.0) + np.maximum(rho_b[0], 0.0)
         exc = np.divide(f, rho_tot, out=np.zeros_like(f), where=rho_tot > 0.0)
@@ -339,9 +339,25 @@ def compute_energy_breakdown(mf, coach: CoachSemilocal) -> dict[str, float]:
     one_e_alpha = float(np.einsum("ij,ji", hcore, dm_a).real)
     one_e_beta = float(np.einsum("ij,ji", hcore, dm_b).real)
 
-    veff = mf.get_veff(mol, dm)
-    alpha_hf_x = float(-0.5 * np.einsum("ij,ji", dm_a, veff.vk[0]).real)
-    beta_hf_x = float(-0.5 * np.einsum("ij,ji", dm_b, veff.vk[1]).real)
+    omega, alpha, hyb = ni.rsh_and_hybrid_coeff(mf.xc, spin=mol.spin)
+    if omega == 0:
+        vk = mf.get_k(mol, dm, hermi=1)
+        vk *= hyb
+    elif alpha == 0:
+        vk = mf.get_k(mol, dm, hermi=1, omega=-omega)
+        vk *= hyb
+    elif hyb == 0:
+        vk = mf.get_k(mol, dm, hermi=1, omega=omega)
+        vk *= alpha
+    else:
+        vk = mf.get_k(mol, dm, hermi=1)
+        vk *= hyb
+        vklr = mf.get_k(mol, dm, hermi=1, omega=omega)
+        vklr *= alpha - hyb
+        vk += vklr
+
+    alpha_hf_x = float(-0.5 * np.einsum("ij,ji", dm_a, vk[0]).real)
+    beta_hf_x = float(-0.5 * np.einsum("ij,ji", dm_b, vk[1]).real)
     coul = float(mf.scf_summary["coul"])
 
     dma, dmb = dft.numint._format_uks_dm(dm)
@@ -462,7 +478,7 @@ def build_mf(case: Case, coach: CoachSemilocal):
     mf.grids.atom_grid = case.atom_grid
     mf.grids.prune = None
 
-    mf.nlc = "VV10"
+    mf.nlc = "vv10"
     mf.nlcgrids.atom_grid = (50, 194)
     mf.nlcgrids.prune = dft.gen_grid.sg1_prune
 
@@ -471,6 +487,7 @@ def build_mf(case: Case, coach: CoachSemilocal):
         "MGGA",
         rsh=(OMEGA, CX_LR_HF, CX_SR_HF - CX_LR_HF),
     )
+    mf.xc = f"RSH({OMEGA},{CX_LR_HF},{CX_SR_HF - CX_LR_HF})"
     mf._numint.nlc_coeff = lambda xc_code: (((VV10_B, VV10_C), 1.0),)
     return mf
 
