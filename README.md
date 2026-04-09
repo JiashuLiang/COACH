@@ -1,6 +1,10 @@
 # COACH
 
-COACH is a script-first workflow for training the COACH exchange-correlation functional from precomputed reaction data.
+COACH is a protocol for developing carefully optimized and appropriately constrained density functionals within a chosen application domain.
+
+The protocol combines exact-constraint enforcement, flexible functional forms, and modern optimization to support systematic functional development. When applied to the range-separated hybrid meta-GGA framework, it yields the COACH functional, which improves accuracy and transferability relative to leading RSH meta-GGAs while retaining the practical computational cost of its rung.
+
+The approach is not limited to RSH mGGAs and can be extended to other rungs of Jacob's Ladder, including mGGAs and double hybrids, as well as to specialized functionals for particular applications such as nuclear magnetic resonance properties or solid-state systems.
 
 ## Supported Workflow
 
