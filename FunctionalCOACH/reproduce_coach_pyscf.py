@@ -3,15 +3,20 @@ from __future__ import annotations
 
 import argparse
 import pathlib
-import re
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.special import erf
 
-from pyscf import dft, gto
+from pyscf import dft, gto, lib
 from pyscf.gto import basis as basis_module
 from dftd4.interface import DampingParam, DispersionModel
+
+try:
+    from FunctionalCOACH import coach_cos_d1, coach_css_d1, coach_x_d1
+except ImportError:
+    import coach_cos_d1
+    import coach_css_d1
+    import coach_x_d1
 
 
 OMEGA = 0.27
@@ -187,90 +192,17 @@ POSITION_MAP = {
 }
 
 
-def _max(a, b):
-    return np.maximum(a, b)
-
-
-def _translate_c_line(line: str) -> str | None:
-    line = line.strip()
-    if not line or line in {"{", "}"} or line.startswith("if "):
-        return None
-    if line.startswith("double "):
-        line = line[7:]
-    line = line.rstrip(";")
-    line = line.replace("std::pow(", "np.power(")
-    line = line.replace("std::max(", "_max(")
-    line = line.replace("std::erf(", "erf(")
-    line = line.replace("std::sqrt(", "np.sqrt(")
-    line = line.replace("std::log(", "np.log(")
-    line = line.replace("M_PI", "np.pi")
-    line = line.replace("M_E", "np.e")
-    line = re.sub(r"double\(([^()]+)\)", r"\1", line)
-    line = line.replace("F[i]", "F")
-    for pos, repl in POSITION_MAP.items():
-        line = line.replace(f"D1F[{pos}][i]", repl)
-    return line
-
-
-def _extract_between(lines: list[str], start_marker: str, end_marker: str) -> list[str]:
-    start = next(i for i, line in enumerate(lines) if start_marker in line) + 1
-    end = next(i for i, line in enumerate(lines[start:], start) if end_marker in line)
-    return lines[start:end]
-
-
-def _compile_c_section(path: pathlib.Path, prelude_start: str, energy_end: str, d1_start: str, d1_end: str):
-    lines = path.read_text().splitlines()
-    loop_idx = next(i for i, line in enumerate(lines) if "for(size_t i = 0; i < NGrid; i++) {" in line)
-    constants = [
-        _translate_c_line(line)
-        for line in lines[:loop_idx]
-        if line.strip().startswith("double ") and line.strip().endswith(";")
-    ]
-    constants = "\n".join(line for line in constants if line)
-
-    prelude = _extract_between(lines, prelude_start, energy_end)
-    prelude = "\n".join(line for line in (_translate_c_line(x) for x in prelude) if line)
-
-    d1 = _extract_between(lines, d1_start, d1_end)
-    d1 = [_translate_c_line(line) for line in d1]
-    d1 = "\n".join(line for line in d1 if line)
-
-    const_env = {"np": np, "erf": erf, "_max": _max}
-    exec(compile(constants, str(path), "exec"), const_env)
-    const_env = {k: v for k, v in const_env.items() if k not in {"np", "erf", "_max", "__builtins__"}}
-    return const_env, compile(prelude, f"{path.name}:prelude", "exec"), compile(prelude + "\n" + d1, f"{path.name}:d1", "exec")
-
-
 class CoachSemilocal:
-    def __init__(self, root: pathlib.Path):
+    def __init__(self, root: pathlib.Path | None = None):
         self.root = root
-        self.x_consts, self.x_prelude, self.x_d1 = _compile_c_section(
-            root / "coach_x.C",
-            "if ( RA > Tol && TA > Tol && RA > 1e-112) {",
-            "F[i] += Ex;",
-            "if ((ssquare > 1e-180 && RA > 1e-81 && TA > 1e-81) && (D1F != NULL)) {",
-            "D1F[POS_TA][i] += I69;",
-        )
-        self.css_consts, self.css_prelude, self.css_d1 = _compile_c_section(
-            root / "coach_css.C",
-            "if ( RA > Tol && TA > Tol && RA > 1e-112) {",
-            "F[i] += Ex;",
-            "if ((RA > 1e-81) && (D1F != NULL)) {",
-            "D1F[POS_TA][i] += I90;",
-        )
-        self.cos_consts, self.cos_prelude, self.cos_d1 = _compile_c_section(
-            root / "coach_cos.C",
-            "if ( RA > Tol && RB > Tol && TA> Tol && TB> Tol && RA > 1e-128 && RB > 1e-128) {",
-            "F[i] += Ec;",
-            "if ((1.0+zeta > 0.0 && 1.0-zeta > 0.0 && RA > 1e-90 && RB > 1e-90) && (D1F != NULL)) {",
-            "D1F[POS_TB][i] += I212;",
-        )
 
     @staticmethod
     def _safe_tau(rho: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         den = np.maximum(rho[0], 0.0)
         grad = rho[1:4]
-        tau_raw = rho[-1]
+        # PySCF returns tau = 1/2 sum_i |grad psi_i|^2.  The Q-Chem COACH
+        # implementation uses tau without the 1/2, so rescale here.
+        tau_raw = 2.0 * rho[-1]
         sigma = np.einsum("xg,xg->g", grad, grad)
         with np.errstate(divide="ignore", invalid="ignore"):
             tau_w = np.divide(sigma, den, out=np.zeros_like(sigma), where=den > 0.0) / 4.0
@@ -282,7 +214,7 @@ class CoachSemilocal:
         if values.size:
             target[mask] += values
 
-    def _single_spin(self, rho: np.ndarray, consts: dict, prelude, d1code, energy_name: str, d1_mask_fn):
+    def _single_spin_x(self, rho: np.ndarray, spin_label: str):
         ra = np.maximum(rho[0], 0.0)
         ga, ta = self._safe_tau(rho)
         f = np.zeros_like(ra)
@@ -292,43 +224,53 @@ class CoachSemilocal:
 
         emask = (ra > TOL) & (ta > TOL) & (ra > 1.0e-112)
         if emask.any():
-            env = dict(consts)
-            env.update(
-                np=np,
-                erf=erf,
-                _max=_max,
-                Tol=TOL,
-                omega=OMEGA,
-                F=np.zeros(emask.sum()),
-                RA=ra[emask],
-                GA=ga[emask],
-                TA=ta[emask],
-            )
             with np.errstate(over="ignore", divide="ignore", invalid="ignore", under="ignore"):
-                exec(prelude, env)
-            self._scatter(f, emask, env[energy_name])
+                if spin_label == "alpha":
+                    out = coach_x_d1.alpha_energy(ra[emask], OMEGA, ga[emask], ta[emask])
+                else:
+                    out = coach_x_d1.beta_energy(ra[emask], OMEGA, ga[emask], ta[emask])
+            self._scatter(f, emask, out["Ex"])
 
-        dmask = d1_mask_fn(ra, ga, ta)
+        dmask = (ra > TOL) & (ta > TOL) & (ra > 1.0e-81) & (ga > 0.0) & ((ga / np.power(ra, 8.0 / 3.0)) > 1.0e-180)
         if dmask.any():
-            env = dict(consts)
-            env.update(
-                np=np,
-                erf=erf,
-                _max=_max,
-                Tol=TOL,
-                omega=OMEGA,
-                RA=ra[dmask],
-                GA=ga[dmask],
-                TA=ta[dmask],
-                V_RA=np.zeros(dmask.sum()),
-                V_GAA=np.zeros(dmask.sum()),
-                V_TA=np.zeros(dmask.sum()),
-            )
             with np.errstate(over="ignore", divide="ignore", invalid="ignore", under="ignore"):
-                exec(d1code, env)
-            self._scatter(v_ra, dmask, env["V_RA"])
-            self._scatter(v_ga, dmask, env["V_GAA"])
-            self._scatter(v_ta, dmask, env["V_TA"])
+                if spin_label == "alpha":
+                    out = coach_x_d1.alpha_d1(ra[dmask], OMEGA, ga[dmask], ta[dmask])
+                else:
+                    out = coach_x_d1.beta_d1(ra[dmask], OMEGA, ga[dmask], ta[dmask])
+            self._scatter(v_ra, dmask, out["V_RA" if spin_label == "alpha" else "V_RB"])
+            self._scatter(v_ga, dmask, out["V_GAA" if spin_label == "alpha" else "V_GBB"])
+            self._scatter(v_ta, dmask, out["V_TA" if spin_label == "alpha" else "V_TB"])
+
+        return f, v_ra, v_ga, v_ta
+
+    def _single_spin_css(self, rho: np.ndarray, spin_label: str):
+        ra = np.maximum(rho[0], 0.0)
+        ga, ta = self._safe_tau(rho)
+        f = np.zeros_like(ra)
+        v_ra = np.zeros_like(ra)
+        v_ga = np.zeros_like(ra)
+        v_ta = np.zeros_like(ra)
+
+        emask = (ra > TOL) & (ta > TOL) & (ra > 1.0e-112)
+        if emask.any():
+            with np.errstate(over="ignore", divide="ignore", invalid="ignore", under="ignore"):
+                if spin_label == "alpha":
+                    out = coach_css_d1.alpha_energy(ra[emask], ga[emask], ta[emask])
+                else:
+                    out = coach_css_d1.beta_energy(ra[emask], ga[emask], ta[emask])
+            self._scatter(f, emask, out["Ex"])
+
+        dmask = (ra > TOL) & (ta > TOL) & (ra > 1.0e-81)
+        if dmask.any():
+            with np.errstate(over="ignore", divide="ignore", invalid="ignore", under="ignore"):
+                if spin_label == "alpha":
+                    out = coach_css_d1.alpha_d1(ra[dmask], ga[dmask], ta[dmask])
+                else:
+                    out = coach_css_d1.beta_d1(ra[dmask], ga[dmask], ta[dmask])
+            self._scatter(v_ra, dmask, out["V_RA" if spin_label == "alpha" else "V_RB"])
+            self._scatter(v_ga, dmask, out["V_GAA" if spin_label == "alpha" else "V_GBB"])
+            self._scatter(v_ta, dmask, out["V_TA" if spin_label == "alpha" else "V_TB"])
 
         return f, v_ra, v_ga, v_ta
 
@@ -344,89 +286,30 @@ class CoachSemilocal:
 
         emask = (ra > TOL) & (rb > TOL) & (ta > TOL) & (tb > TOL) & (ra > 1.0e-128) & (rb > 1.0e-128)
         if emask.any():
-            env = dict(self.cos_consts)
-            env.update(
-                np=np,
-                erf=erf,
-                _max=_max,
-                Tol=TOL,
-                F=np.zeros(emask.sum()),
-                RA=ra[emask],
-                RB=rb[emask],
-                GA=ga[emask],
-                GB=gb[emask],
-                GAB=gab[emask],
-                TA=ta[emask],
-                TB=tb[emask],
-            )
             with np.errstate(over="ignore", divide="ignore", invalid="ignore", under="ignore"):
-                exec(self.cos_prelude, env)
-            self._scatter(f, emask, env["Ec"])
+                out = coach_cos_d1.os_energy(ra[emask], rb[emask], ga[emask], gab[emask], gb[emask], ta[emask], tb[emask])
+            self._scatter(f, emask, out["Ec"])
 
         dmask = emask & (ra > 1.0e-90) & (rb > 1.0e-90)
         if dmask.any():
-            env = dict(self.cos_consts)
-            env.update(
-                np=np,
-                erf=erf,
-                _max=_max,
-                Tol=TOL,
-                RA=ra[dmask],
-                RB=rb[dmask],
-                GA=ga[dmask],
-                GB=gb[dmask],
-                GAB=gab[dmask],
-                TA=ta[dmask],
-                TB=tb[dmask],
-            )
-            for name in POSITION_MAP.values():
-                env[name] = np.zeros(dmask.sum())
             with np.errstate(over="ignore", divide="ignore", invalid="ignore", under="ignore"):
-                exec(self.cos_d1, env)
+                out = coach_cos_d1.os_d1(ra[dmask], rb[dmask], ga[dmask], gab[dmask], gb[dmask], ta[dmask], tb[dmask])
             for name in POSITION_MAP.values():
-                self._scatter(derivs[name], dmask, env[name])
+                self._scatter(derivs[name], dmask, out[name])
 
         return f, derivs
 
-    def eval_xc(self, xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=None):
+    def eval_mgga_xc(self, xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=None):
         if spin != 1:
             raise NotImplementedError("This script is written for UKS only.")
         if deriv > 1:
             raise NotImplementedError("Only exc and vxc are implemented.")
 
         rho_a, rho_b = rho
-        fx_a, vxa_ra, vxa_ga, vxa_ta = self._single_spin(
-            rho_a,
-            self.x_consts,
-            self.x_prelude,
-            self.x_d1,
-            "Ex",
-            lambda ra, ga, ta: (ra > TOL) & (ta > TOL) & (ra > 1.0e-81) & (ga > 0.0) & ((ga / np.power(ra, 8.0 / 3.0)) > 1.0e-180),
-        )
-        fx_b, vxb_rb, vxb_gb, vxb_tb = self._single_spin(
-            rho_b,
-            self.x_consts,
-            self.x_prelude,
-            self.x_d1,
-            "Ex",
-            lambda rb, gb, tb: (rb > TOL) & (tb > TOL) & (rb > 1.0e-81) & (gb > 0.0) & ((gb / np.power(rb, 8.0 / 3.0)) > 1.0e-180),
-        )
-        fcss_a, vcss_ra, vcss_ga, vcss_ta = self._single_spin(
-            rho_a,
-            self.css_consts,
-            self.css_prelude,
-            self.css_d1,
-            "Ex",
-            lambda ra, ga, ta: (ra > TOL) & (ta > TOL) & (ra > 1.0e-81),
-        )
-        fcss_b, vcss_rb, vcss_gb, vcss_tb = self._single_spin(
-            rho_b,
-            self.css_consts,
-            self.css_prelude,
-            self.css_d1,
-            "Ex",
-            lambda rb, gb, tb: (rb > TOL) & (tb > TOL) & (rb > 1.0e-81),
-        )
+        fx_a, vxa_ra, vxa_ga, vxa_ta = self._single_spin_x(rho_a, "alpha")
+        fx_b, vxb_rb, vxb_gb, vxb_tb = self._single_spin_x(rho_b, "beta")
+        fcss_a, vcss_ra, vcss_ga, vcss_ta = self._single_spin_css(rho_a, "alpha")
+        fcss_b, vcss_rb, vcss_gb, vcss_tb = self._single_spin_css(rho_b, "beta")
         fcos, vcos = self._opposite_spin(rho_a, rho_b)
 
         f = fx_a + fx_b + fcss_a + fcss_b + fcos
@@ -444,6 +327,120 @@ class CoachSemilocal:
         rho_tot = np.maximum(rho_a[0], 0.0) + np.maximum(rho_b[0], 0.0)
         exc = np.divide(f, rho_tot, out=np.zeros_like(f), where=rho_tot > 0.0)
         return exc, (vrho, vsigma, None, vtau), None, None
+
+
+def compute_energy_breakdown(mf, coach: CoachSemilocal) -> dict[str, float]:
+    dm = np.asarray(mf.make_rdm1())
+    dm_a, dm_b = dm
+    ni = mf._numint
+    mol = mf.mol
+
+    hcore = mf.get_hcore(mol)
+    one_e_alpha = float(np.einsum("ij,ji", hcore, dm_a).real)
+    one_e_beta = float(np.einsum("ij,ji", hcore, dm_b).real)
+
+    veff = mf.get_veff(mol, dm)
+    alpha_hf_x = float(-0.5 * np.einsum("ij,ji", dm_a, veff.vk[0]).real)
+    beta_hf_x = float(-0.5 * np.einsum("ij,ji", dm_b, veff.vk[1]).real)
+    coul = float(mf.scf_summary["coul"])
+
+    dma, dmb = dft.numint._format_uks_dm(dm)
+    nao = dma.shape[-1]
+    make_rhoa, nset = ni._gen_rho_evaluator(mol, dma, 1, False, mf.grids)[:2]
+    make_rhob = ni._gen_rho_evaluator(mol, dmb, 1, False, mf.grids)[0]
+    if nset != 1:
+        raise NotImplementedError("Only single-density decomposition is implemented.")
+
+    dft_exchange = 0.0
+    dft_correlation = 0.0
+    max_memory = mf.max_memory - lib.current_memory()[0]
+    for ao, mask, weight, coords in ni.block_loop(mol, mf.grids, nao, 1, max_memory=max_memory):
+        rho_a = make_rhoa(0, ao, mask, "MGGA")
+        rho_b = make_rhob(0, ao, mask, "MGGA")
+
+        fx_a, _, _, _ = coach._single_spin_x(rho_a, "alpha")
+        fx_b, _, _, _ = coach._single_spin_x(rho_b, "beta")
+        fc_ss_a, _, _, _ = coach._single_spin_css(rho_a, "alpha")
+        fc_ss_b, _, _, _ = coach._single_spin_css(rho_b, "beta")
+        fc_os, _ = coach._opposite_spin(rho_a, rho_b)
+
+        dft_exchange += float(np.dot(weight, fx_a + fx_b))
+        dft_correlation += float(np.dot(weight, fc_ss_a + fc_ss_b + fc_os))
+
+    dft_nlc = 0.0
+    if mf.nlc:
+        xc_nlc = mf.xc if ni.libxc.is_nlc(mf.xc) else mf.nlc
+        _, dft_nlc, _ = ni.nr_nlc_vxc(mol, mf.nlcgrids, xc_nlc, dm_a + dm_b, max_memory=mf.max_memory)
+        dft_nlc = float(dft_nlc)
+
+    return {
+        "total": float(mf.e_tot),
+        "alpha_hf_x": alpha_hf_x,
+        "beta_hf_x": beta_hf_x,
+        "dft_exchange": dft_exchange,
+        "dft_correlation": dft_correlation,
+        "dft_nlc": dft_nlc,
+        "one_e_alpha": one_e_alpha,
+        "one_e_beta": one_e_beta,
+        "coul": coul,
+        "nuc": float(mf.energy_nuc()),
+    }
+
+
+QCHEM_BREAKDOWN_LABELS = {
+    "Alpha HF Exchange Energy": "alpha_hf_x",
+    "Beta HF Exchange Energy": "beta_hf_x",
+    "DFT Correlation Energy": "dft_correlation",
+    "DFT Exchange Energy": "dft_exchange",
+    "DFT Non-Local Correlation Energy": "dft_nlc",
+    "One-Electron (alpha) Energy": "one_e_alpha",
+    "One-Electron (beta) Energy": "one_e_beta",
+    "Total Coulomb Energy": "coul",
+    "SCF energy in the final basis set": "total",
+    "Nuclear Repulsion Energy": "nuc",
+}
+
+
+def load_qchem_breakdown(path: pathlib.Path) -> dict[str, float]:
+    out = {}
+    for line in path.read_text().splitlines():
+        if "=" not in line:
+            continue
+        lhs, rhs = line.split("=", 1)
+        lhs = " ".join(lhs.split())
+        rhs = rhs.strip().split()[0]
+        key = QCHEM_BREAKDOWN_LABELS.get(lhs)
+        if key is not None:
+            out[key] = float(rhs.replace("D", "E").replace("d", "e"))
+    return out
+
+
+def format_breakdown_comparison(pyscf_terms: dict[str, float], qchem_terms: dict[str, float]) -> str:
+    rows = [
+        ("total", "Total energy"),
+        ("alpha_hf_x", "Alpha HF Exchange"),
+        ("beta_hf_x", "Beta HF Exchange"),
+        ("dft_exchange", "DFT Exchange"),
+        ("dft_correlation", "DFT Correlation"),
+        ("dft_nlc", "DFT Non-Local Correlation"),
+        ("one_e_alpha", "One-Electron (alpha)"),
+        ("one_e_beta", "One-Electron (beta)"),
+        ("coul", "Total Coulomb"),
+        ("nuc", "Nuclear Repulsion"),
+    ]
+    lines = ["Energy decomposition:"]
+    for key, label in rows:
+        py_val = pyscf_terms.get(key)
+        qc_val = qchem_terms.get(key)
+        if py_val is None:
+            continue
+        if qc_val is None:
+            lines.append(f"  {label:<28} PySCF = {py_val: .12f} Ha")
+            continue
+        lines.append(
+            f"  {label:<28} PySCF = {py_val: .12f} Ha   Q-Chem = {qc_val: .12f} Ha   Delta = {py_val - qc_val: .6e} Ha"
+        )
+    return "\n".join(lines)
 
 
 def build_mf(case: Case, coach: CoachSemilocal):
@@ -469,14 +466,11 @@ def build_mf(case: Case, coach: CoachSemilocal):
     mf.nlcgrids.atom_grid = (50, 194)
     mf.nlcgrids.prune = dft.gen_grid.sg1_prune
 
-    dft.libxc.define_xc_(
-        mf._numint,
-        coach.eval_xc,
-        xctype="MGGA",
-        hyb=CX_SR_HF,
+    mf = mf.define_xc_(
+        coach.eval_mgga_xc,
+        "MGGA",
         rsh=(OMEGA, CX_LR_HF, CX_SR_HF - CX_LR_HF),
     )
-    mf.xc = f"RSH({OMEGA},{CX_LR_HF},{CX_SR_HF - CX_LR_HF})"
     mf._numint.nlc_coeff = lambda xc_code: (((VV10_B, VV10_C), 1.0),)
     return mf
 
@@ -505,6 +499,9 @@ def run_case(case: Case, coach: CoachSemilocal):
     energy = mf.kernel()
     d4_energy = d4_atm_energy(mf.mol)
     total = energy + d4_energy
+    pyscf_terms = compute_energy_breakdown(mf, coach)
+    qchem_path = pathlib.Path(__file__).with_name(f"{case.name}.out")
+    qchem_terms = load_qchem_breakdown(qchem_path) if qchem_path.exists() else {}
 
     print(f"PySCF SCF energy (semilocal + HF + VV10): {energy: .10f} Ha")
     print(f"D4-ATM correction:                      {d4_energy: .10f} Ha")
@@ -512,6 +509,8 @@ def run_case(case: Case, coach: CoachSemilocal):
     print(f"Reference D4:                           {case.reference_d4: .10f} Ha")
     print(f"Reference total:                        {case.reference_energy: .10f} Ha")
     print(f"Delta total:                            {total - case.reference_energy: .10e} Ha")
+    if qchem_terms:
+        print(format_breakdown_comparison(pyscf_terms, qchem_terms))
 
 
 def main():
