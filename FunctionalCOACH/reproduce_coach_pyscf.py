@@ -181,155 +181,64 @@ H 0.75503878 0.00000000 -0.19696952
 }
 
 
-POSITION_MAP = {
-    "POS_RA": "V_RA",
-    "POS_RB": "V_RB",
-    "POS_GAA": "V_GAA",
-    "POS_GAB": "V_GAB",
-    "POS_GBB": "V_GBB",
-    "POS_TA": "V_TA",
-    "POS_TB": "V_TB",
-}
+def _prepare_spin_inputs(rho: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    den = rho[0]
+    grad = rho[1:4]
+    sigma = np.einsum("xg,xg->g", grad, grad)
+    tau_raw = 2.0 * rho[-1]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        tau_w = np.divide(sigma, 4.0 * den, out=np.zeros_like(sigma), where=den != 0.0)
+    tau = np.maximum(tau_raw, tau_w)
+    return den, sigma, tau
 
 
-class CoachSemilocal:
-    def __init__(self, root: pathlib.Path | None = None):
-        self.root = root
+def _evaluate_coach_terms(rho_a: np.ndarray, rho_b: np.ndarray) -> dict[str, dict[str, np.ndarray]]:
+    ra, gaa, ta = _prepare_spin_inputs(rho_a)
+    rb, gbb, tb = _prepare_spin_inputs(rho_b)
+    gab = np.einsum("xg,xg->g", rho_a[1:4], rho_b[1:4])
 
-    @staticmethod
-    def _safe_tau(rho: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        den = np.maximum(rho[0], 0.0)
-        grad = rho[1:4]
-        # PySCF returns tau = 1/2 sum_i |grad psi_i|^2.  The Q-Chem COACH
-        # implementation uses tau without the 1/2, so rescale here.
-        tau_raw = 2.0 * rho[-1]
-        sigma = np.einsum("xg,xg->g", grad, grad)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            tau_w = np.divide(sigma, den, out=np.zeros_like(sigma), where=den > 0.0) / 4.0
-        tau = np.maximum(np.maximum(tau_raw, 0.0), tau_w)
-        return sigma, tau
-
-    @staticmethod
-    def _scatter(target: np.ndarray, mask: np.ndarray, values: np.ndarray) -> None:
-        if values.size:
-            target[mask] += values
-
-    def _single_spin_x(self, rho: np.ndarray, spin_label: str):
-        ra = np.maximum(rho[0], 0.0)
-        ga, ta = self._safe_tau(rho)
-        f = np.zeros_like(ra)
-        v_ra = np.zeros_like(ra)
-        v_ga = np.zeros_like(ra)
-        v_ta = np.zeros_like(ra)
-
-        emask = (ra > TOL) & (ta > TOL) & (ra > 1.0e-112)
-        if emask.any():
-            with np.errstate(over="ignore", divide="ignore", invalid="ignore", under="ignore"):
-                if spin_label == "alpha":
-                    out = coach_x_d1.alpha_energy(ra[emask], OMEGA, ga[emask], ta[emask])
-                else:
-                    out = coach_x_d1.beta_energy(ra[emask], OMEGA, ga[emask], ta[emask])
-            self._scatter(f, emask, out["Ex"])
-
-        dmask = (ra > TOL) & (ta > TOL) & (ra > 1.0e-81) & (ga > 0.0) & ((ga / np.power(ra, 8.0 / 3.0)) > 1.0e-180)
-        if dmask.any():
-            with np.errstate(over="ignore", divide="ignore", invalid="ignore", under="ignore"):
-                if spin_label == "alpha":
-                    out = coach_x_d1.alpha_d1(ra[dmask], OMEGA, ga[dmask], ta[dmask])
-                else:
-                    out = coach_x_d1.beta_d1(ra[dmask], OMEGA, ga[dmask], ta[dmask])
-            self._scatter(v_ra, dmask, out["V_RA" if spin_label == "alpha" else "V_RB"])
-            self._scatter(v_ga, dmask, out["V_GAA" if spin_label == "alpha" else "V_GBB"])
-            self._scatter(v_ta, dmask, out["V_TA" if spin_label == "alpha" else "V_TB"])
-
-        return f, v_ra, v_ga, v_ta
-
-    def _single_spin_css(self, rho: np.ndarray, spin_label: str):
-        ra = np.maximum(rho[0], 0.0)
-        ga, ta = self._safe_tau(rho)
-        f = np.zeros_like(ra)
-        v_ra = np.zeros_like(ra)
-        v_ga = np.zeros_like(ra)
-        v_ta = np.zeros_like(ra)
-
-        emask = (ra > TOL) & (ta > TOL) & (ra > 1.0e-112)
-        if emask.any():
-            with np.errstate(over="ignore", divide="ignore", invalid="ignore", under="ignore"):
-                if spin_label == "alpha":
-                    out = coach_css_d1.alpha_energy(ra[emask], ga[emask], ta[emask])
-                else:
-                    out = coach_css_d1.beta_energy(ra[emask], ga[emask], ta[emask])
-            self._scatter(f, emask, out["Ex"])
-
-        dmask = (ra > TOL) & (ta > TOL) & (ra > 1.0e-81)
-        if dmask.any():
-            with np.errstate(over="ignore", divide="ignore", invalid="ignore", under="ignore"):
-                if spin_label == "alpha":
-                    out = coach_css_d1.alpha_d1(ra[dmask], ga[dmask], ta[dmask])
-                else:
-                    out = coach_css_d1.beta_d1(ra[dmask], ga[dmask], ta[dmask])
-            self._scatter(v_ra, dmask, out["V_RA" if spin_label == "alpha" else "V_RB"])
-            self._scatter(v_ga, dmask, out["V_GAA" if spin_label == "alpha" else "V_GBB"])
-            self._scatter(v_ta, dmask, out["V_TA" if spin_label == "alpha" else "V_TB"])
-
-        return f, v_ra, v_ga, v_ta
-
-    def _opposite_spin(self, rho_a: np.ndarray, rho_b: np.ndarray):
-        ra = np.maximum(rho_a[0], 0.0)
-        rb = np.maximum(rho_b[0], 0.0)
-        ga, ta = self._safe_tau(rho_a)
-        gb, tb = self._safe_tau(rho_b)
-        gab = np.einsum("xg,xg->g", rho_a[1:4], rho_b[1:4])
-
-        f = np.zeros_like(ra)
-        derivs = {name: np.zeros_like(ra) for name in POSITION_MAP.values()}
-
-        emask = (ra > TOL) & (rb > TOL) & (ta > TOL) & (tb > TOL) & (ra > 1.0e-128) & (rb > 1.0e-128)
-        if emask.any():
-            with np.errstate(over="ignore", divide="ignore", invalid="ignore", under="ignore"):
-                out = coach_cos_d1.os_energy(ra[emask], rb[emask], ga[emask], gab[emask], gb[emask], ta[emask], tb[emask])
-            self._scatter(f, emask, out["Ec"])
-
-        dmask = emask & (ra > 1.0e-90) & (rb > 1.0e-90)
-        if dmask.any():
-            with np.errstate(over="ignore", divide="ignore", invalid="ignore", under="ignore"):
-                out = coach_cos_d1.os_d1(ra[dmask], rb[dmask], ga[dmask], gab[dmask], gb[dmask], ta[dmask], tb[dmask])
-            for name in POSITION_MAP.values():
-                self._scatter(derivs[name], dmask, out[name])
-
-        return f, derivs
-
-    def eval_mgga_xc(self, xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=None):
-        if spin != 1:
-            raise NotImplementedError("This script is written for UKS only.")
-        if deriv > 1:
-            raise NotImplementedError("Only exc and vxc are implemented.")
-
-        rho_a, rho_b = rho
-        fx_a, vxa_ra, vxa_ga, vxa_ta = self._single_spin_x(rho_a, "alpha")
-        fx_b, vxb_rb, vxb_gb, vxb_tb = self._single_spin_x(rho_b, "beta")
-        fcss_a, vcss_ra, vcss_ga, vcss_ta = self._single_spin_css(rho_a, "alpha")
-        fcss_b, vcss_rb, vcss_gb, vcss_tb = self._single_spin_css(rho_b, "beta")
-        fcos, vcos = self._opposite_spin(rho_a, rho_b)
-
-        f = fx_a + fx_b + fcss_a + fcss_b + fcos
-        vrho = np.stack([vxa_ra + vcss_ra + vcos["V_RA"], vxb_rb + vcss_rb + vcos["V_RB"]], axis=1)
-        vsigma = np.stack(
-            [
-                vxa_ga + vcss_ga + vcos["V_GAA"],
-                vcos["V_GAB"],
-                vxb_gb + vcss_gb + vcos["V_GBB"],
-            ],
-            axis=1,
-        )
-        vtau = 2.0 * np.stack([vxa_ta + vcss_ta + vcos["V_TA"], vxb_tb + vcss_tb + vcos["V_TB"]], axis=1)
-
-        rho_tot = np.maximum(rho_a[0], 0.0) + np.maximum(rho_b[0], 0.0)
-        exc = np.divide(f, rho_tot, out=np.zeros_like(f), where=rho_tot > 0.0)
-        return exc, (vrho, vsigma, None, vtau), None, None
+    with np.errstate(over="ignore", divide="ignore", invalid="ignore", under="ignore"):
+        x_a = coach_x_d1.alpha_d1(ra, OMEGA, gaa, ta)
+        x_b = coach_x_d1.beta_d1(rb, OMEGA, gbb, tb)
+        css_a = coach_css_d1.alpha_d1(ra, gaa, ta)
+        css_b = coach_css_d1.beta_d1(rb, gbb, tb)
+        cos = coach_cos_d1.os_d1(ra, rb, gaa, gab, gbb, ta, tb)
+    return {"x_a": x_a, "x_b": x_b, "css_a": css_a, "css_b": css_b, "cos": cos}
 
 
-def compute_energy_breakdown(mf, coach: CoachSemilocal) -> dict[str, float]:
+def eval_coach_xc(xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=None):
+    if spin != 1:
+        raise NotImplementedError("This script is written for UKS only.")
+    if deriv > 1:
+        raise NotImplementedError("Only exc and vxc are implemented.")
+
+    rho_a, rho_b = rho
+    terms = _evaluate_coach_terms(rho_a, rho_b)
+
+    x_a = terms["x_a"]
+    x_b = terms["x_b"]
+    css_a = terms["css_a"]
+    css_b = terms["css_b"]
+    cos = terms["cos"]
+
+    f = x_a["Ex"] + x_b["Ex"] + css_a["Ex"] + css_b["Ex"] + cos["Ec"]
+    vrho = np.stack([x_a["V_RA"] + css_a["V_RA"] + cos["V_RA"], x_b["V_RB"] + css_b["V_RB"] + cos["V_RB"]], axis=1)
+    vsigma = np.stack(
+        [
+            x_a["V_GAA"] + css_a["V_GAA"] + cos["V_GAA"],
+            cos["V_GAB"],
+            x_b["V_GBB"] + css_b["V_GBB"] + cos["V_GBB"],
+        ],
+        axis=1,
+    )
+    vtau = 2.0 * np.stack([x_a["V_TA"] + css_a["V_TA"] + cos["V_TA"], x_b["V_TB"] + css_b["V_TB"] + cos["V_TB"]], axis=1)
+
+    rho_tot = rho_a[0] + rho_b[0]
+    exc = np.divide(f, rho_tot, out=np.zeros_like(f), where=rho_tot != 0.0)
+    return exc, (vrho, vsigma, None, vtau), None, None
+
+
+def compute_energy_breakdown(mf) -> dict[str, float]:
     dm = np.asarray(mf.make_rdm1())
     dm_a, dm_b = dm
     ni = mf._numint
@@ -374,14 +283,9 @@ def compute_energy_breakdown(mf, coach: CoachSemilocal) -> dict[str, float]:
         rho_a = make_rhoa(0, ao, mask, "MGGA")
         rho_b = make_rhob(0, ao, mask, "MGGA")
 
-        fx_a, _, _, _ = coach._single_spin_x(rho_a, "alpha")
-        fx_b, _, _, _ = coach._single_spin_x(rho_b, "beta")
-        fc_ss_a, _, _, _ = coach._single_spin_css(rho_a, "alpha")
-        fc_ss_b, _, _, _ = coach._single_spin_css(rho_b, "beta")
-        fc_os, _ = coach._opposite_spin(rho_a, rho_b)
-
-        dft_exchange += float(np.dot(weight, fx_a + fx_b))
-        dft_correlation += float(np.dot(weight, fc_ss_a + fc_ss_b + fc_os))
+        terms = _evaluate_coach_terms(rho_a, rho_b)
+        dft_exchange += float(np.dot(weight, terms["x_a"]["Ex"] + terms["x_b"]["Ex"]))
+        dft_correlation += float(np.dot(weight, terms["css_a"]["Ex"] + terms["css_b"]["Ex"] + terms["cos"]["Ec"]))
 
     dft_nlc = 0.0
     if mf.nlc:
@@ -459,7 +363,7 @@ def format_breakdown_comparison(pyscf_terms: dict[str, float], qchem_terms: dict
     return "\n".join(lines)
 
 
-def build_mf(case: Case, coach: CoachSemilocal):
+def build_mf(case: Case):
     basis = case.basis
     if case.name == "16_C_AE18":
         basis = {"C": basis_module.load("aug-cc-pCV5Z", "C")}
@@ -483,7 +387,7 @@ def build_mf(case: Case, coach: CoachSemilocal):
     mf.nlcgrids.prune = dft.gen_grid.sg1_prune
 
     mf = mf.define_xc_(
-        coach.eval_mgga_xc,
+        eval_coach_xc,
         "MGGA",
         rsh=(OMEGA, CX_LR_HF, CX_SR_HF - CX_LR_HF),
     )
@@ -502,7 +406,7 @@ def d4_atm_energy(mol: gto.Mole) -> float:
     return float(model.get_dispersion(params, grad=False)["energy"])
 
 
-def run_case(case: Case, coach: CoachSemilocal):
+def run_case(case: Case):
     print(f"\n=== {case.name} ===")
     if case.d4_only:
         mol = gto.M(atom=case.atom, charge=case.charge, spin=case.spin, unit="Angstrom", verbose=0)
@@ -512,11 +416,11 @@ def run_case(case: Case, coach: CoachSemilocal):
         print(f"Delta D4:          {d4_energy - case.reference_d4: .10e} Ha")
         return
 
-    mf = build_mf(case, coach)
+    mf = build_mf(case)
     energy = mf.kernel()
     d4_energy = d4_atm_energy(mf.mol)
     total = energy + d4_energy
-    pyscf_terms = compute_energy_breakdown(mf, coach)
+    pyscf_terms = compute_energy_breakdown(mf)
     qchem_path = pathlib.Path(__file__).with_name(f"{case.name}.out")
     qchem_terms = load_qchem_breakdown(qchem_path) if qchem_path.exists() else {}
 
@@ -540,12 +444,9 @@ def main():
     )
     args = parser.parse_args()
 
-    root = pathlib.Path(__file__).resolve().parent
-    coach = CoachSemilocal(root)
-
     names = args.case or ["16_C_AE18", "SIE4x4_h2o", "L14_2a"]
     for name in names:
-        run_case(CASES[name], coach)
+        run_case(CASES[name])
 
 
 if __name__ == "__main__":
