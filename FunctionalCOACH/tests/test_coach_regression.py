@@ -85,9 +85,9 @@ def compute_energy_breakdown(mf) -> dict[str, float]:
     for ao, mask, weight, coords in ni.block_loop(mol, mf.grids, nao, 1, max_memory=max_memory):
         rho_a = make_rhoa(0, ao, mask, "MGGA")
         rho_b = make_rhob(0, ao, mask, "MGGA")
-        terms = evaluate_coach_terms(rho_a, rho_b)
-        dft_exchange += float(np.dot(weight, terms["x_a"]["Ex"] + terms["x_b"]["Ex"]))
-        dft_correlation += float(np.dot(weight, terms["css_a"]["Ex"] + terms["css_b"]["Ex"] + terms["cos"]["Ec"]))
+        x_a, x_b, css_a, css_b, cos = evaluate_coach_terms(rho_a, rho_b)
+        dft_exchange += float(np.dot(weight, x_a[0] + x_b[0]))
+        dft_correlation += float(np.dot(weight, css_a[0] + css_b[0] + cos[0]))
 
     dft_nlc = 0.0
     if mf.nlc:

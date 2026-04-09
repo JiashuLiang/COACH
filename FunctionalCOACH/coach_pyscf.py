@@ -83,18 +83,17 @@ def _prepare_spin_inputs(rho: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.nd
     return den, sigma, tau
 
 
-def evaluate_coach_terms(rho_a: np.ndarray, rho_b: np.ndarray) -> dict[str, dict[str, np.ndarray]]:
+def evaluate_coach_terms(rho_a: np.ndarray, rho_b: np.ndarray):
     ra, gaa, ta = _prepare_spin_inputs(rho_a)
     rb, gbb, tb = _prepare_spin_inputs(rho_b)
     gab = np.einsum("xg,xg->g", rho_a[1:4], rho_b[1:4])
 
-    with np.errstate(over="ignore", divide="ignore", invalid="ignore", under="ignore"):
-        x_a = coach_x_d1.alpha_d1(ra, OMEGA, gaa, ta)
-        x_b = coach_x_d1.beta_d1(rb, OMEGA, gbb, tb)
-        css_a = coach_css_d1.alpha_d1(ra, gaa, ta)
-        css_b = coach_css_d1.beta_d1(rb, gbb, tb)
-        cos = coach_cos_d1.os_d1(ra, rb, gaa, gab, gbb, ta, tb)
-    return {"x_a": x_a, "x_b": x_b, "css_a": css_a, "css_b": css_b, "cos": cos}
+    x_a = coach_x_d1.evaluate(ra, OMEGA, gaa, ta)
+    x_b = coach_x_d1.evaluate(rb, OMEGA, gbb, tb)
+    css_a = coach_css_d1.evaluate(ra, gaa, ta)
+    css_b = coach_css_d1.evaluate(rb, gbb, tb)
+    cos = coach_cos_d1.evaluate(ra, rb, gaa, gab, gbb, ta, tb)
+    return x_a, x_b, css_a, css_b, cos
 
 
 def eval_coach_xc(xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=None):
@@ -114,33 +113,32 @@ def eval_coach_xc(xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbo
     else:
         raise NotImplementedError("Unsupported spin flag.")
 
-    terms = evaluate_coach_terms(rho_a, rho_b)
+    x_a, x_b, css_a, css_b, cos = evaluate_coach_terms(rho_a, rho_b)
+    ex_a, vrho_x_a, vsigma_x_a, vtau_x_a = x_a
+    ex_b, vrho_x_b, vsigma_x_b, vtau_x_b = x_b
+    ec_ss_a, vrho_css_a, vsigma_css_a, vtau_css_a = css_a
+    ec_ss_b, vrho_css_b, vsigma_css_b, vtau_css_b = css_b
+    ec_os, vrho_os_a, vrho_os_b, vsigma_os_aa, vsigma_os_ab, vsigma_os_bb, vtau_os_a, vtau_os_b = cos
 
-    x_a = terms["x_a"]
-    x_b = terms["x_b"]
-    css_a = terms["css_a"]
-    css_b = terms["css_b"]
-    cos = terms["cos"]
-
-    f = x_a["Ex"] + x_b["Ex"] + css_a["Ex"] + css_b["Ex"] + cos["Ec"]
+    f = ex_a + ex_b + ec_ss_a + ec_ss_b + ec_os
     if spin == 0:
-        vrho = 0.5 * (x_a["V_RA"] + css_a["V_RA"] + cos["V_RA"] + x_b["V_RB"] + css_b["V_RB"] + cos["V_RB"])
-        vsigma = 0.25 * (x_a["V_GAA"] + css_a["V_GAA"] + cos["V_GAA"] + cos["V_GAB"] + x_b["V_GBB"] + css_b["V_GBB"] + cos["V_GBB"])
-        vtau = x_a["V_TA"] + css_a["V_TA"] + cos["V_TA"] + x_b["V_TB"] + css_b["V_TB"] + cos["V_TB"]
+        vrho = 0.5 * (vrho_x_a + vrho_css_a + vrho_os_a + vrho_x_b + vrho_css_b + vrho_os_b)
+        vsigma = 0.25 * (vsigma_x_a + vsigma_css_a + vsigma_os_aa + vsigma_os_ab + vsigma_x_b + vsigma_css_b + vsigma_os_bb)
+        vtau = vtau_x_a + vtau_css_a + vtau_os_a + vtau_x_b + vtau_css_b + vtau_os_b
         rho_scalar = rho_tot[0]
         exc = np.divide(f, rho_scalar, out=np.zeros_like(f), where=rho_scalar != 0.0)
         return exc, (vrho, vsigma, None, vtau), None, None
 
-    vrho = np.stack([x_a["V_RA"] + css_a["V_RA"] + cos["V_RA"], x_b["V_RB"] + css_b["V_RB"] + cos["V_RB"]], axis=1)
+    vrho = np.stack([vrho_x_a + vrho_css_a + vrho_os_a, vrho_x_b + vrho_css_b + vrho_os_b], axis=1)
     vsigma = np.stack(
         [
-            x_a["V_GAA"] + css_a["V_GAA"] + cos["V_GAA"],
-            cos["V_GAB"],
-            x_b["V_GBB"] + css_b["V_GBB"] + cos["V_GBB"],
+            vsigma_x_a + vsigma_css_a + vsigma_os_aa,
+            vsigma_os_ab,
+            vsigma_x_b + vsigma_css_b + vsigma_os_bb,
         ],
         axis=1,
     )
-    vtau = 2.0 * np.stack([x_a["V_TA"] + css_a["V_TA"] + cos["V_TA"], x_b["V_TB"] + css_b["V_TB"] + cos["V_TB"]], axis=1)
+    vtau = 2.0 * np.stack([vtau_x_a + vtau_css_a + vtau_os_a, vtau_x_b + vtau_css_b + vtau_os_b], axis=1)
 
     rho_scalar = rho_a[0] + rho_b[0]
     exc = np.divide(f, rho_scalar, out=np.zeros_like(f), where=rho_scalar != 0.0)
