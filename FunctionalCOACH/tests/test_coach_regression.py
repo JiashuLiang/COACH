@@ -125,6 +125,15 @@ def test_sie4x4_h2o_matches_qchem():
     assert abs(breakdown["coul"] - ref["coul"]) < 5.0e-5
 
 
+def test_sie4x4_h2o_rks_matches_qchem():
+    xyz_path = XYZ_DIR / "SIE4x4_h2o.xyz"
+    qchem_path = QCHEM_DIR / "SIE4x4_h2o.out"
+    result = run_coach_job(xyz_path, verbose=0, restricted=True)
+    ref = load_qchem_reference(qchem_path)
+
+    assert abs(result["total_energy"] - ref["total"]) < 2.0e-6
+
+
 def test_16_c_ae18_matches_qchem():
     xyz_path = XYZ_DIR / "16_C_AE18.xyz"
     qchem_path = QCHEM_DIR / "16_C_AE18.out"

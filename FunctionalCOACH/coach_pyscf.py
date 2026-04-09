@@ -23,30 +23,6 @@ VV10_B = 5.5
 VV10_C = 0.01
 D4_PARAMS = dict(s6=0.0, s8=0.0, s9=1.0, a1=0.215, a2=5.8, alp=16.0)
 
-def parse_xyz_metadata(comment_line: str) -> dict[str, str]:
-    metadata = {}
-    for field in comment_line.split(","):
-        if "=" not in field:
-            continue
-        key, value = field.split("=", 1)
-        metadata[key.strip().lower()] = value.strip()
-    return metadata
-
-
-def parse_xc_grid(spec: str) -> tuple[int, int]:
-    digits = spec.strip()
-    if len(digits) != 12 or not digits.isdigit():
-        raise ValueError(f"Unsupported xc_grid format: {spec!r}")
-    return int(digits[:6]), int(digits[6:])
-
-
-def resolve_basis(atom_lines: tuple[str, ...], basis_name: str):
-    if basis_name.upper().startswith("AUG-CC-PC"):
-        symbols = sorted({line.split()[0] for line in atom_lines})
-        return {symbol: basis_module.load(basis_name, symbol) for symbol in symbols}
-    return basis_name
-
-
 def load_xyz_job(xyz_path: str | Path) -> dict[str, object]:
     xyz_path = Path(xyz_path).resolve()
     lines = xyz_path.read_text().splitlines()
@@ -54,7 +30,12 @@ def load_xyz_job(xyz_path: str | Path) -> dict[str, object]:
         raise ValueError(f"{xyz_path}: expected at least 3 lines")
 
     natom = int(lines[0].strip())
-    metadata = parse_xyz_metadata(lines[1].strip())
+    metadata = {}
+    for field in lines[1].strip().split(","):
+        if "=" not in field:
+            continue
+        key, value = field.split("=", 1)
+        metadata[key.strip().lower()] = value.strip()
     atom_lines = tuple(line.strip() for line in lines[2 : 2 + natom] if line.strip())
     if len(atom_lines) != natom:
         raise ValueError(f"{xyz_path}: expected {natom} atoms, found {len(atom_lines)}")
@@ -66,9 +47,15 @@ def load_xyz_job(xyz_path: str | Path) -> dict[str, object]:
 
     basis = metadata["basis"]
     xc_grid = metadata.get("xc_grid", "000099000590")
+    xc_grid_digits = xc_grid.strip()
+    if len(xc_grid_digits) != 12 or not xc_grid_digits.isdigit():
+        raise ValueError(f"Unsupported xc_grid format: {xc_grid!r}")
     max_cycle = int(metadata.get("max_scf_cycles", metadata.get("max_cycle", "200")))
     conv_tol = float(metadata.get("pyscf_conv_tol", metadata.get("conv_tol", "1e-7")))
     d4_only = metadata.get("coach_check", "scf").lower() == "d4_only"
+    if basis.upper().startswith("AUG-CC-PC"):
+        symbols = sorted({line.split()[0] for line in atom_lines})
+        basis = {symbol: basis_module.load(basis, symbol) for symbol in symbols}
 
     return {
         "name": xyz_path.stem,
@@ -78,7 +65,7 @@ def load_xyz_job(xyz_path: str | Path) -> dict[str, object]:
         "charge": charge,
         "spin": multiplicity - 1,
         "basis": basis,
-        "atom_grid": parse_xc_grid(xc_grid),
+        "atom_grid": (int(xc_grid_digits[:6]), int(xc_grid_digits[6:])),
         "conv_tol": conv_tol,
         "max_cycle": max_cycle,
         "d4_only": d4_only,
@@ -111,12 +98,22 @@ def evaluate_coach_terms(rho_a: np.ndarray, rho_b: np.ndarray) -> dict[str, dict
 
 
 def eval_coach_xc(xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=None):
-    if spin != 1:
-        raise NotImplementedError("This COACH wrapper is written for UKS only.")
     if deriv > 1:
         raise NotImplementedError("Only exc and vxc are implemented.")
 
-    rho_a, rho_b = rho
+    if spin == 0:
+        rho_tot = rho
+        rho_a = np.array(rho_tot, copy=True)
+        rho_b = np.array(rho_tot, copy=True)
+        rho_a[0:4] *= 0.5
+        rho_b[0:4] *= 0.5
+        rho_a[-1] *= 0.5
+        rho_b[-1] *= 0.5
+    elif spin == 1:
+        rho_a, rho_b = rho
+    else:
+        raise NotImplementedError("Unsupported spin flag.")
+
     terms = evaluate_coach_terms(rho_a, rho_b)
 
     x_a = terms["x_a"]
@@ -126,6 +123,14 @@ def eval_coach_xc(xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbo
     cos = terms["cos"]
 
     f = x_a["Ex"] + x_b["Ex"] + css_a["Ex"] + css_b["Ex"] + cos["Ec"]
+    if spin == 0:
+        vrho = 0.5 * (x_a["V_RA"] + css_a["V_RA"] + cos["V_RA"] + x_b["V_RB"] + css_b["V_RB"] + cos["V_RB"])
+        vsigma = 0.25 * (x_a["V_GAA"] + css_a["V_GAA"] + cos["V_GAA"] + cos["V_GAB"] + x_b["V_GBB"] + css_b["V_GBB"] + cos["V_GBB"])
+        vtau = x_a["V_TA"] + css_a["V_TA"] + cos["V_TA"] + x_b["V_TB"] + css_b["V_TB"] + cos["V_TB"]
+        rho_scalar = rho_tot[0]
+        exc = np.divide(f, rho_scalar, out=np.zeros_like(f), where=rho_scalar != 0.0)
+        return exc, (vrho, vsigma, None, vtau), None, None
+
     vrho = np.stack([x_a["V_RA"] + css_a["V_RA"] + cos["V_RA"], x_b["V_RB"] + css_b["V_RB"] + cos["V_RB"]], axis=1)
     vsigma = np.stack(
         [
@@ -137,22 +142,24 @@ def eval_coach_xc(xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbo
     )
     vtau = 2.0 * np.stack([x_a["V_TA"] + css_a["V_TA"] + cos["V_TA"], x_b["V_TB"] + css_b["V_TB"] + cos["V_TB"]], axis=1)
 
-    rho_tot = rho_a[0] + rho_b[0]
-    exc = np.divide(f, rho_tot, out=np.zeros_like(f), where=rho_tot != 0.0)
+    rho_scalar = rho_a[0] + rho_b[0]
+    exc = np.divide(f, rho_scalar, out=np.zeros_like(f), where=rho_scalar != 0.0)
     return exc, (vrho, vsigma, None, vtau), None, None
 
 
-def build_coach_mf(xyz_path: str | Path, verbose: int = 3):
+def build_coach_mf(xyz_path: str | Path, verbose: int = 3, restricted: bool = False):
     job = load_xyz_job(xyz_path)
+    if restricted and job["spin"] != 0:
+        raise ValueError("Restricted COACH is only available for closed-shell inputs.")
     mol = gto.M(
         atom=job["atom"],
         charge=job["charge"],
         spin=job["spin"],
-        basis=resolve_basis(job["atom_lines"], job["basis"]),
+        basis=job["basis"],
         unit="Angstrom",
         verbose=verbose,
     )
-    mf = dft.UKS(mol)
+    mf = dft.RKS(mol) if restricted else dft.UKS(mol)
     mf.conv_tol = job["conv_tol"]
     mf.max_cycle = job["max_cycle"]
     mf.grids.atom_grid = job["atom_grid"]
@@ -180,20 +187,18 @@ def d4_atm_energy(mol: gto.Mole) -> float:
     return float(model.get_dispersion(params, grad=False)["energy"])
 
 
-def run_coach_job(xyz_path: str | Path, verbose: int = 0) -> dict[str, object]:
-    job = load_xyz_job(xyz_path)
+def run_coach_job(xyz_path: str | Path, verbose: int = 0, restricted: bool = False) -> dict[str, object]:
+    job, mf = build_coach_mf(xyz_path, verbose=verbose, restricted=restricted)
     if job["d4_only"]:
-        mol = gto.M(atom=job["atom"], charge=job["charge"], spin=job["spin"], unit="Angstrom", verbose=0)
-        d4_energy = d4_atm_energy(mol)
+        d4_energy = d4_atm_energy(mf.mol)
         return {
             "job": job,
-            "mf": None,
+            "mf": mf,
             "scf_energy": None,
             "d4_energy": d4_energy,
             "total_energy": d4_energy,
         }
 
-    _, mf = build_coach_mf(xyz_path, verbose=verbose)
     scf_energy = float(mf.kernel())
     d4_energy = d4_atm_energy(mf.mol)
     return {
@@ -208,10 +213,11 @@ def run_coach_job(xyz_path: str | Path, verbose: int = 0) -> dict[str, object]:
 def main():
     parser = argparse.ArgumentParser(description="Run the COACH PySCF workflow for one XYZ input.")
     parser.add_argument("xyz", type=Path, help="XYZ file with COACH metadata in the comment line.")
+    parser.add_argument("--rks", action="store_true", help="Run restricted KS for closed-shell inputs.")
     parser.add_argument("--verbose", type=int, default=3, help="PySCF verbosity level.")
     args = parser.parse_args()
 
-    result = run_coach_job(args.xyz, verbose=args.verbose)
+    result = run_coach_job(args.xyz, verbose=args.verbose, restricted=args.rks)
     job = result["job"]
 
     print(f"\n=== {job['name']} ===")
