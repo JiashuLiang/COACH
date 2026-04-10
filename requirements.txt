@@ -1,9 +1,11 @@
-# Core numerical and workflow dependencies
+# Convenience environment for a full local checkout.
+# The canonical dependency groups live in pyproject.toml.
 numpy
 scipy
 pyscf
-gurobipy
-
-# Optional code paths used by the current scripts
 pandas
 PyYAML
+gurobipy
+dftd4
+basis-set-exchange
+pytest

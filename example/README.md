@@ -2,6 +2,8 @@
 
 This directory contains a runnable reference for the full workflow using the `AE18` atomic XYZ files as example.
 
+The generated files under `example/pyscf_outputs/`, `example/processed_data/`, and `example/runs/` are versioned on purpose. They serve as reference fixtures so users can compare their local outputs against a known example without first rerunning the whole pipeline.
+
 The generated PySCF outputs and downstream preprocessing artifacts were created with:
 
 ```bash
