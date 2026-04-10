@@ -13,6 +13,22 @@ The approach is not limited to RSH mGGAs and can be extended to other rungs of J
 - Functional use (`FunctionalCOACH/`): `pyscf`, `dftd4`, `basis-set-exchange`
 - Tests: `pytest`
 
+## Installation
+
+Recommended full-checkout install:
+
+```bash
+python -m pip install -e ".[workflow,functional,test]"
+```
+
+Smaller installs are also available:
+
+- Workflow only: `python -m pip install -e ".[workflow]"`
+- Standalone functional only: `python -m pip install -e ".[functional]"`
+- Functional regression tests: `python -m pip install -e ".[functional,test]"`
+
+`pyproject.toml` is the canonical dependency definition. [`requirements.txt`](requirements.txt) is kept as a convenience full-environment mirror for local checkouts that want one flat requirements file.
+
 ## Supported Workflow
 
 The maintained baseline pipeline is:
@@ -44,6 +60,8 @@ Populate copies of `dataset_eval.csv` and `training_weights.csv` with your actua
 
 A runnable reference example based on the AE18 atomic XYZ files lives under [`example/`](example/). See [`example/README.md`](example/README.md) for the exact commands and generated artifacts.
 
+The checked-in files under `example/pyscf_outputs/`, `example/processed_data/`, and `example/runs/` are intentional reference fixtures. They are kept in the repository so users can compare their own local runs against known-good artifacts without having to regenerate the full example first.
+
 ## FunctionalCOACH
 
 [`FunctionalCOACH/`](FunctionalCOACH) is the standalone PySCF implementation of the fitted COACH functional. It is separate from the training workflow above and is meant for running and checking COACH energies directly.
@@ -53,6 +71,8 @@ This folder contains:
 - [`FunctionalCOACH/coach_pyscf.py`](FunctionalCOACH/coach_pyscf.py): the main entry point for building and running COACH from an XYZ input with metadata
 - [`FunctionalCOACH/coach_x.py`](FunctionalCOACH/coach_x.py), [`FunctionalCOACH/coach_css.py`](FunctionalCOACH/coach_css.py), [`FunctionalCOACH/coach_cos.py`](FunctionalCOACH/coach_cos.py): semilocal COACH exchange and correlation kernels
 - [`FunctionalCOACH/tests/test_coach_regression.py`](FunctionalCOACH/tests/test_coach_regression.py): regression tests for the standalone functional path
+
+The installed Python packages exposed by this repository are `FunctionalCOACH` for the standalone functional path and `coachopt` for the maintained optimization workflow helpers.
 
 ## Directory Guide
 

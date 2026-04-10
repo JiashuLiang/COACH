@@ -97,16 +97,16 @@
  Parts of Q-Chem use Armadillo 12.8.2 (Cortisol Injector).
  http://arma.sourceforge.net/
 
- Q-Chem begins on Sat Jan 24 22:11:59 2026  
+ Q-Chem begins on [redacted timestamp]
 
- Host: n0019.lr8
+ Host: [redacted host]
 0
 
- Scratch files written to /global/scratch/users/jsliang/BigNC/COACH/L14_2a//
- Executable: /clusterfs/mhg/jsliang/qchem_trunk/build/qcprog.exe
+ Scratch files written to [redacted path]
+ Executable: [redacted path]
  Number of threads = 128
- Processing $rem in /clusterfs/mhg/jsliang/qchem_trunk/config/preferences:
- Processing $rem in /global/home/users/jsliang/.qchemrc:
+ Processing $rem in [redacted path]:
+ Processing $rem in [redacted path]:
 
  Checking the input file for inconsistencies... 	...done.
 
@@ -1210,12 +1210,10 @@ $end
       XZZZ     -35.8539   YZZZ      -5.7988   ZZZZ   -7952.4042
  -----------------------------------------------------------------
  Total job time:  3500.13s(wall), 119938.67s(cpu) 
- Sat Jan 24 23:10:19 2026
+ [redacted timestamp]
 
         *************************************************************
         *                                                           *
         *  Thank you very much for using Q-Chem.  Have a nice day.  *
         *                                                           *
         *************************************************************
-
-

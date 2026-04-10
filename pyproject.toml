@@ -4,10 +4,31 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "coach-workflow"
-version = "0.0.0"
+version = "0.1.0"
 description = "Script-first COACH workflow plus the standalone PySCF functional implementation"
 readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Jiashu Liang", email = "jsliang@berkeley.edu" },
+]
 requires-python = ">=3.10"
+keywords = [
+  "density functional theory",
+  "dft",
+  "pyscf",
+  "quantum chemistry",
+  "optimization",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Chemistry",
+]
 dependencies = [
   "numpy",
   "scipy",
@@ -30,7 +51,10 @@ test = [
 ]
 
 [tool.setuptools]
-packages = ["FunctionalCOACH"]
+packages = ["FunctionalCOACH", "coachopt"]
+
+[tool.setuptools.package-dir]
+coachopt = "2_optimization/coachopt"
 
 [tool.pytest.ini_options]
 testpaths = ["FunctionalCOACH/tests"]
