@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 from dftd4.interface import DampingParam, DispersionModel
-from pyscf import dft, gto, lib
+from pyscf import dft, gto
 from pyscf.gto import basis as basis_module
 
 try:
@@ -59,9 +59,7 @@ def load_xyz_job(xyz_path: str | Path) -> dict[str, object]:
 
     return {
         "name": xyz_path.stem,
-        "xyz_path": xyz_path,
         "atom": "\n".join(atom_lines),
-        "atom_lines": atom_lines,
         "charge": charge,
         "spin": multiplicity - 1,
         "basis": basis,
@@ -187,24 +185,14 @@ def d4_atm_energy(mol: gto.Mole) -> float:
 
 def run_coach_job(xyz_path: str | Path, verbose: int = 0, restricted: bool = False) -> dict[str, object]:
     job, mf = build_coach_mf(xyz_path, verbose=verbose, restricted=restricted)
-    if job["d4_only"]:
-        d4_energy = d4_atm_energy(mf.mol)
-        return {
-            "job": job,
-            "mf": mf,
-            "scf_energy": None,
-            "d4_energy": d4_energy,
-            "total_energy": d4_energy,
-        }
-
-    scf_energy = float(mf.kernel())
+    scf_energy = None if job["d4_only"] else float(mf.kernel())
     d4_energy = d4_atm_energy(mf.mol)
     return {
         "job": job,
         "mf": mf,
         "scf_energy": scf_energy,
         "d4_energy": d4_energy,
-        "total_energy": scf_energy + d4_energy,
+        "total_energy": d4_energy if scf_energy is None else scf_energy + d4_energy,
     }
 
 
