@@ -1,18 +1,37 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "coach-workflow"
 version = "0.0.0"
-description = "Script-first workflow for training the COACH exchange-correlation functional"
+description = "Script-first COACH workflow plus the standalone PySCF functional implementation"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "numpy",
   "scipy",
-  "pyscf",
-  "gurobipy",
-  "pandas",
-  "PyYAML",
 ]
 
+[project.optional-dependencies]
+functional = [
+  "pyscf",
+  "dftd4",
+  "basis-set-exchange",
+]
+workflow = [
+  "pyscf",
+  "pandas",
+  "PyYAML",
+  "gurobipy",
+]
+test = [
+  "pytest",
+]
+
+[tool.setuptools]
+packages = ["FunctionalCOACH"]
+
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["2_optimization"]
+testpaths = ["FunctionalCOACH/tests"]
+pythonpath = ["."]

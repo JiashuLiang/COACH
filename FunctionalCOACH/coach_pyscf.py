@@ -9,11 +9,11 @@ from pyscf import dft, gto
 from pyscf.gto import basis as basis_module
 
 try:
-    from FunctionalCOACH import coach_cos_d1, coach_css_d1, coach_x_d1
+    from FunctionalCOACH import coach_cos, coach_css, coach_x
 except ImportError:
-    import coach_cos_d1
-    import coach_css_d1
-    import coach_x_d1
+    import coach_cos
+    import coach_css
+    import coach_x
 
 
 OMEGA = 0.27
@@ -86,11 +86,11 @@ def evaluate_coach_terms(rho_a: np.ndarray, rho_b: np.ndarray):
     rb, gbb, tb = _prepare_spin_inputs(rho_b)
     gab = np.einsum("xg,xg->g", rho_a[1:4], rho_b[1:4])
 
-    x_a = coach_x_d1.evaluate(ra, OMEGA, gaa, ta)
-    x_b = coach_x_d1.evaluate(rb, OMEGA, gbb, tb)
-    css_a = coach_css_d1.evaluate(ra, gaa, ta)
-    css_b = coach_css_d1.evaluate(rb, gbb, tb)
-    cos = coach_cos_d1.evaluate(ra, rb, gaa, gab, gbb, ta, tb)
+    x_a = coach_x.evaluate(ra, OMEGA, gaa, ta)
+    x_b = coach_x.evaluate(rb, OMEGA, gbb, tb)
+    css_a = coach_css.evaluate(ra, gaa, ta)
+    css_b = coach_css.evaluate(rb, gbb, tb)
+    cos = coach_cos.evaluate(ra, rb, gaa, gab, gbb, ta, tb)
     return x_a, x_b, css_a, css_b, cos
 
 

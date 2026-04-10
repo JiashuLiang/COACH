@@ -1,2 +1,1 @@
-"""COACH PySCF helpers and generated semilocal kernels."""
-
+"""COACH PySCF helpers and semilocal kernels."""
