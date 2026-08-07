@@ -19,7 +19,7 @@ python 1_data_generation/extract_data.py \
 python 2_optimization/build_data.py \
   --reaction-data example/processed_data/reaction_data.pkl \
   --dataset-eval 2_optimization/templates/dataset_eval.csv \
-  --training-weights 2_optimization/templates/training_weights.csv \
+  --training-weights example/training_weights.csv \
   --output-dir example/processed_data
 
 GRB_LICENSE_FILE=~/gurobi.lic python 2_optimization/run_mio.py \
@@ -65,6 +65,7 @@ python 2_optimization/analyze_results.py \
 Notes:
 
 - The XYZ comment line supplies `charge` and `multiplicity`.
+- `example/training_weights.csv` is the compact AE18 example input; the final published fit weights are recorded separately in `2_optimization/templates/training_weights.csv`.
 - The PySCF generator uses its maintained default basis (`def2-qzvppd`) unless `--use-xyz-basis` is requested.
 - `example/pyscf_outputs/` stores one text output per species, matching the shape expected by `extract_data.py`.
 - `example/processed_data/` now keeps both the raw pickles and the downstream preprocessing artifacts in one place.
