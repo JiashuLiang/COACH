@@ -59,9 +59,15 @@ cSSeightthree = 753.14559185625683
 cSSeightfour = -1256.83593750000000
 cSSninethree = -1414.23498563221051
 cSSeleventhree = 539.98063087775324
+DENSITY_FLOOR = 1.0e-16
 
 
 def evaluate(rho_sigma, sigma_sigma, tau_sigma):
+    low_density = rho_sigma <= DENSITY_FLOOR
+    rho_sigma = np.where(low_density, 1.0, rho_sigma)
+    sigma_sigma = np.where(low_density, 1.0, sigma_sigma)
+    tau_sigma = np.where(low_density, 1.0, tau_sigma)
+
     t1 = np.power(rho_sigma, 1.0 / 3.0)
     r_s = crs / t1
     s_sigma_sq = sigma_sigma / np.power(rho_sigma, 8.0 / 3.0)
@@ -185,4 +191,7 @@ def evaluate(rho_sigma, sigma_sigma, tau_sigma):
     vsigma_sigma = t80 * t85 * t61 * g_c_ss * rho_sigma + t99 * eps_c1 * rho_sigma
     t100 = d_tau_ratio_d_tau * t56 + t54 * t57
     vtau_sigma = t90 * t100 * eps_c1 * rho_sigma
-    return energy_density, vrho_sigma, vsigma_sigma, vtau_sigma
+    return tuple(
+        np.where(low_density, 0.0, value)
+        for value in (energy_density, vrho_sigma, vsigma_sigma, vtau_sigma)
+    )
