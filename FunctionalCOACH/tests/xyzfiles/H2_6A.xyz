@@ -1,0 +1,4 @@
+2
+charge=0,multiplicity=1,basis=DEF2-QZVPPD,xc_grid=000099000590,max_scf_cycles=300
+H 0.0 0.0 -3.0
+H 0.0 0.0  3.0

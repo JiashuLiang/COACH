@@ -56,9 +56,15 @@ cXtenzero = -6.30558989628451
 cXelevenzero = -11.93279679996215
 cXelevenone = 69.06548970921259
 cXeleventwo = -129.97699130862122
+DENSITY_FLOOR = 1.0e-16
 
 
 def evaluate(rho_sigma, omega, sigma_sigma, tau_sigma):
+    low_density = rho_sigma <= DENSITY_FLOOR
+    rho_sigma = np.where(low_density, 1.0, rho_sigma)
+    sigma_sigma = np.where(low_density, 1.0, sigma_sigma)
+    tau_sigma = np.where(low_density, 1.0, tau_sigma)
+
     t1 = np.power(rho_sigma, 4.0 / 3.0)
     ueg_exchange_density = cexu * t1
     t2 = np.power(rho_sigma, 1.0 / 3.0)
@@ -154,4 +160,7 @@ def evaluate(rho_sigma, omega, sigma_sigma, tau_sigma):
     vsigma_sigma = t58 * ueg_exchange_density * short_range_factor * g_x_sigma + t75 * ueg_exchange_density * short_range_factor * t13
     t76 = d_tau_ratio_d_tau * d_v_sigma_d_tau_ratio + t50 * t52
     vtau_sigma = t71 * t76 * ueg_exchange_density * short_range_factor * t13
-    return energy_density, vrho_sigma, vsigma_sigma, vtau_sigma
+    return tuple(
+        np.where(low_density, 0.0, value)
+        for value in (energy_density, vrho_sigma, vsigma_sigma, vtau_sigma)
+    )

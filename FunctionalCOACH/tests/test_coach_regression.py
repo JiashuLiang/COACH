@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 from pyscf import dft, lib
 
-from FunctionalCOACH.coach_pyscf import evaluate_coach_terms, run_coach_job
+from FunctionalCOACH import coach_cos, coach_css, coach_x
+from FunctionalCOACH.coach_pyscf import build_coach_mf, evaluate_coach_terms, run_coach_job
 
 
 ROOT = Path(__file__).resolve().parent
@@ -123,6 +124,82 @@ def test_sie4x4_h2o_matches_qchem():
     assert abs(breakdown["dft_correlation"] - ref["dft_correlation"]) < 5.0e-6
     assert abs(breakdown["dft_nlc"] - ref["dft_nlc"]) < 5.0e-6
     assert abs(breakdown["coul"] - ref["coul"]) < 5.0e-5
+
+
+def test_sie4x4_h_empty_beta_channel_matches_qchem():
+    """Regress the exact zero-beta-density path used by one-electron UKS."""
+
+    xyz_path = XYZ_DIR / "SIE4x4_h.xyz"
+    result = run_coach_job(xyz_path, verbose=0)
+
+    # Q-Chem trunk reference from BenchmarkData/1e_problem/1e/COACH,
+    # SIE4x4_h.out (2026-07-05).  These values are also in the reviewed G1b
+    # archive.  D4-ATM is exactly zero for a one-atom system.
+    ref = {
+        "total": -0.4967249850,
+        "alpha_hf_x": -0.17389870085227,
+        "beta_hf_x": 0.0,
+        "dft_correlation": 0.0,
+        "dft_exchange": -0.13715469280133,
+        "dft_nlc": 0.00513922094935,
+        "one_e_alpha": -0.49948592793126,
+        "one_e_beta": 0.0,
+        "coul": 0.30867511562260,
+    }
+
+    assert result["mf"].converged
+    assert np.isfinite(result["total_energy"])
+    assert np.all(np.isfinite(np.asarray(result["mf"].mo_energy)))
+    assert abs(result["total_energy"] - ref["total"]) < 2.0e-6
+
+    breakdown = compute_energy_breakdown(result["mf"])
+    for key in (
+        "alpha_hf_x",
+        "beta_hf_x",
+        "dft_correlation",
+        "dft_exchange",
+        "dft_nlc",
+        "one_e_alpha",
+        "one_e_beta",
+        "coul",
+    ):
+        assert np.isfinite(breakdown[key])
+        assert abs(breakdown[key] - ref[key]) < 5.0e-6
+
+
+def test_functionals_zero_all_terms_at_low_density():
+    low = np.asarray([0.0, 1.0e-20])
+    finite = np.ones_like(low)
+
+    x = coach_x.evaluate(low, 0.27, finite, finite)
+    css = coach_css.evaluate(low, finite, finite)
+    cos = coach_cos.evaluate(low, finite, finite, finite, finite, finite, finite)
+
+    for term in (*x, *css, *cos):
+        assert np.array_equal(term, np.zeros_like(low))
+
+
+def test_h2_localized_uks_guess_is_finite_in_screened_density_tails():
+    """Regress tiny nonzero spin-density tails in the H2 dissociation guess."""
+
+    xyz_path = XYZ_DIR / "H2_6A.xyz"
+    _job, mf = build_coach_mf(xyz_path, verbose=0)
+    overlap = mf.get_ovlp()
+    slices = mf.mol.aoslice_by_atom()
+    atomic_guess = np.asarray(mf.get_init_guess(key="atom"))
+    total_guess = atomic_guess if atomic_guess.ndim == 2 else np.sum(atomic_guess, axis=0)
+    spin_densities = []
+    for atom_index in (0, 1):
+        ao_start, ao_stop = (int(value) for value in slices[atom_index, 2:4])
+        density = np.zeros_like(total_guess)
+        density[ao_start:ao_stop, ao_start:ao_stop] = total_guess[
+            ao_start:ao_stop, ao_start:ao_stop
+        ]
+        electron_count = float(np.einsum("ij,ji", density, overlap).real)
+        spin_densities.append(density / electron_count)
+
+    veff = np.asarray(mf.get_veff(dm=np.stack(spin_densities)))
+    assert np.all(np.isfinite(veff))
 
 
 def test_sie4x4_h2o_rks_matches_qchem():

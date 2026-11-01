@@ -32,6 +32,7 @@ cbetatwo = 0.1778
 cgamma = 0.031091
 gammaOS = 0.006
 ctauUEG = 0.6*np.power(6.0*np.pi*np.pi,2.0/3.0)
+DENSITY_FLOOR = 1.0e-16
 cOSzerozero = 0.73766424898150
 cOSzeroone = -0.05220907244310
 cOSzerotwo = 11.01094128842661
@@ -116,6 +117,15 @@ cOSelevensix = -7862.78917507127517
 cOSelevenseven = 10580.44005628731611
 
 def evaluate(rho_alpha, rho_beta, sigma_aa, sigma_ab, sigma_bb, tau_alpha, tau_beta):
+    low_density = (rho_alpha <= DENSITY_FLOOR) | (rho_beta <= DENSITY_FLOOR)
+    rho_alpha = np.where(low_density, 1.0, rho_alpha)
+    rho_beta = np.where(low_density, 1.0, rho_beta)
+    sigma_aa = np.where(low_density, 1.0, sigma_aa)
+    sigma_ab = np.where(low_density, 0.0, sigma_ab)
+    sigma_bb = np.where(low_density, 1.0, sigma_bb)
+    tau_alpha = np.where(low_density, 1.0, tau_alpha)
+    tau_beta = np.where(low_density, 1.0, tau_beta)
+
     vrho_alpha = 0
     vrho_beta = 0
     vsigma_aa = 0
@@ -467,4 +477,16 @@ def evaluate(rho_alpha, rho_beta, sigma_aa, sigma_ab, sigma_bb, tau_alpha, tau_b
     vsigma_bb += t286
     vtau_alpha += t287
     vtau_beta += t288
-    return energy_density, vrho_alpha, vrho_beta, vsigma_aa, vsigma_ab, vsigma_bb, vtau_alpha, vtau_beta
+    return tuple(
+        np.where(low_density, 0.0, value)
+        for value in (
+            energy_density,
+            vrho_alpha,
+            vrho_beta,
+            vsigma_aa,
+            vsigma_ab,
+            vsigma_bb,
+            vtau_alpha,
+            vtau_beta,
+        )
+    )

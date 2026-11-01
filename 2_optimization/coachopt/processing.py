@@ -48,22 +48,24 @@ def _weights_for_dataset(weight_spec: str, count: int) -> list[float]:
 def _selected_training_entries(
     dataset: str,
     datapoints: str,
-    reaction_entries: list[tuple[str, np.ndarray, float]],
+    entries_by_dataset: dict[str, list[tuple[str, np.ndarray, float]]],
+    entries_by_reaction: dict[str, tuple[str, np.ndarray, float]],
 ) -> list[tuple[str, np.ndarray, float]]:
     """Resolve the ordered training reactions for one dataset-weight row."""
     if datapoints == "All":
-        return reaction_entries
+        if dataset not in entries_by_dataset:
+            raise KeyError(f"Dataset {dataset!r} was not found in dataset_eval metadata")
+        return entries_by_dataset[dataset]
 
     requested_ids = [item.strip() for item in datapoints.split(",") if item.strip()]
     if not requested_ids:
         raise ValueError(f"Dataset {dataset!r} has an empty datapoints field")
 
-    by_reaction = {reaction_id: (reaction_id, features, target) for reaction_id, features, target in reaction_entries}
     selected_entries: list[tuple[str, np.ndarray, float]] = []
     for reaction_id in requested_ids:
-        if reaction_id not in by_reaction:
-            raise KeyError(f"Reaction {reaction_id!r} was not found in dataset_eval metadata for dataset {dataset!r}")
-        selected_entries.append(by_reaction[reaction_id])
+        if reaction_id not in entries_by_reaction:
+            raise KeyError(f"Reaction {reaction_id!r} was not found in dataset_eval metadata")
+        selected_entries.append(entries_by_reaction[reaction_id])
     return selected_entries
 
 
@@ -75,7 +77,8 @@ def build_and_save_data(
     a_rows: tuple[int, ...] = DEFAULT_A_ROWS,
 ) -> dict[str, object]:
     """Build all preprocessing artifacts expected by the cleaned optimization pipeline."""
-    reactions_by_dataset: dict[str, list[str]] = {}
+    entries_by_dataset: dict[str, list[tuple[str, np.ndarray, float]]] = {}
+    entries_by_reaction: dict[str, tuple[str, np.ndarray, float]] = {}
     a_matrix_dataset_rows: dict[str, list[np.ndarray]] = {}
     b_vec_dataset_rows: dict[str, list[float]] = {}
     diff_rows_by_grid: dict[str, list[np.ndarray]] = {grid: [] for grid in ANALYSIS_DIFF_GRIDS}
@@ -84,10 +87,6 @@ def build_and_save_data(
     b_vec_rows: list[float] = []
     weight_rows: list[float] = []
     name_list: list[str] = []
-    training_rows_by_dataset: dict[str, list] = {}
-    for row in training_weight.itertuples(index=False):
-        training_rows_by_dataset.setdefault(row.Dataset, []).append(row)
-
     for dataset, df_dataset in dataset_eval.groupby("Dataset", sort=False):
         reaction_entries: list[tuple[str, np.ndarray, float]] = []
 
@@ -98,8 +97,11 @@ def build_and_save_data(
 
             reaction = reaction_data[reaction_id]
             features, target = _feature_vector(reaction, a_rows)
-            reaction_entries.append((reaction_id, features, target))
-            reactions_by_dataset.setdefault(dataset, []).append(reaction_id)
+            entry = (reaction_id, features, target)
+            if reaction_id in entries_by_reaction:
+                raise ValueError(f"Reaction {reaction_id!r} occurs more than once in dataset_eval metadata")
+            reaction_entries.append(entry)
+            entries_by_reaction[reaction_id] = entry
             a_matrix_dataset_rows.setdefault(dataset, []).append(features)
             b_vec_dataset_rows.setdefault(dataset, []).append(target)
 
@@ -113,21 +115,21 @@ def build_and_save_data(
                 diff_rows_by_grid[diff_grid].append(np.concatenate([selected, np.asarray([0.0], dtype=float)]))
                 diff_names_by_grid[diff_grid].append(reaction_id)
 
-        if dataset not in training_rows_by_dataset:
-            continue
+        entries_by_dataset[dataset] = reaction_entries
 
-        for training_row in training_rows_by_dataset[dataset]:
-            selected_entries = _selected_training_entries(dataset, training_row.datapoints, reaction_entries)
-            weights = _weights_for_dataset(training_row.weights, len(selected_entries))
-            for reaction_id, features, target in selected_entries:
-                a_matrix_rows.append(features)
-                b_vec_rows.append(target)
-                name_list.append(reaction_id)
-            weight_rows.extend(weights)
-
-    for dataset in training_rows_by_dataset:
-        if dataset not in reactions_by_dataset:
-            raise KeyError(f"Dataset {dataset!r} was not found in dataset_eval metadata")
+    for training_row in training_weight.itertuples(index=False):
+        selected_entries = _selected_training_entries(
+            training_row.Dataset,
+            training_row.datapoints,
+            entries_by_dataset,
+            entries_by_reaction,
+        )
+        weights = _weights_for_dataset(training_row.weights, len(selected_entries))
+        for reaction_id, features, target in selected_entries:
+            a_matrix_rows.append(features)
+            b_vec_rows.append(target)
+            name_list.append(reaction_id)
+        weight_rows.extend(weights)
 
     output_dir = ensure_directory(output_dir)
     a_matrix = np.asarray(a_matrix_rows, dtype=float)

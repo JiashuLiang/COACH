@@ -47,14 +47,17 @@ For steps 3-7, including the preprocessing, optimization, constraint-selection, 
 
 ### Metadata Setup
 
-Project-specific metadata files are expected as CSVs. Start from the reference files in [`2_optimization/templates/`](2_optimization/templates/):
+Project-specific metadata files are expected as CSVs. The reference files are in [`2_optimization/templates/`](2_optimization/templates/):
 
 - [`2_optimization/templates/dataset_eval.csv`](2_optimization/templates/dataset_eval.csv)
 - [`2_optimization/templates/training_weights.csv`](2_optimization/templates/training_weights.csv)
 - [`2_optimization/templates/Standard_errors.csv`](2_optimization/templates/Standard_errors.csv)
 - [`2_optimization/templates/dataset_info.csv`](2_optimization/templates/dataset_info.csv)
 
-Populate copies of `dataset_eval.csv` and `training_weights.csv` with your actual reactions, dataset assignments, and weights before running the workflow. For required columns and downstream usage details, see [`2_optimization/README.md`](2_optimization/README.md).
+The checked-in `training_weights.csv` records the final published COACH coefficient-fitting selection and weights.
+Supply matching full reaction metadata and generated reaction data to reproduce that fit; for a new optimization, replace the weight record with the desired selection.
+The runnable AE18 example uses its own compact [`example/training_weights.csv`](example/training_weights.csv).
+For provenance, required columns, and downstream usage details, see [`2_optimization/README.md`](2_optimization/README.md).
 
 ### Example
 

@@ -71,12 +71,17 @@ This directory contains the maintained script-first COACH workflow for preproces
 
 ## Metadata Setup
 
-Start from the reference files in [`templates/`](templates) and populate them with your project data:
+The metadata files in [`templates/`](templates) serve two different purposes:
 
 - [`templates/dataset_eval.csv`](templates/dataset_eval.csv)
 - [`templates/training_weights.csv`](templates/training_weights.csv)
 - [`templates/Standard_errors.csv`](templates/Standard_errors.csv)
 - [`templates/dataset_info.csv`](templates/dataset_info.csv)
+
+`training_weights.csv` is the published final COACH coefficient-fitting selection and weight.
+The other files retain the compact reference metadata used by the runnable AE18 example and by downstream analysis.
+To rebuild the full fit, provide the full `dataset_eval.csv` and `reaction_data.pkl` artifacts whose reaction identifiers cover every row listed in `training_weights.csv`.
+The AE18 example instead uses [`../example/training_weights.csv`](../example/training_weights.csv).
 
 `analyze_results.py` requires a standard-error CSV with at least `Dataset` and `RMSE` columns. It reads `dataset_info.csv` directly using the shipped `Name` and `Datatype` columns.
 
@@ -85,6 +90,9 @@ Start from the reference files in [`templates/`](templates) and populate them wi
 - `training_weights.csv`
   - Required columns: `Dataset,datapoints,weights`
   - `datapoints` supports `All` or a comma-separated reaction list.
+  - A row with `All` must use a dataset name present in `dataset_eval.csv`.
+  - A row with an explicit reaction list may use a descriptive subset label; reaction IDs are resolved in their listed order across `dataset_eval.csv`.
+  - Repeated reaction IDs are retained, matching their repeated contribution to the recorded fit.
   - `weights` supports a numeric value, `Shrink`, or `Shrink2`.
 - `Standard_errors.csv`
   - Required columns for `analyze_results.py`: `Dataset,RMSE`
